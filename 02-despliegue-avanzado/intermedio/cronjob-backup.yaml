@@ -1,0 +1,49 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup-db
+  namespace: produccion
+  labels:
+    app: backup
+spec:
+  # Cada día a las 2:00 AM
+  schedule: "0 2 * * *"
+  # No ejecutar si el anterior todavía está corriendo
+  concurrencyPolicy: Forbid
+  # Cuántos Jobs exitosos mantener en historial
+  successfulJobsHistoryLimit: 3
+  # Cuántos Jobs fallidos mantener (para diagnóstico)
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 3600
+      template:
+        metadata:
+          labels:
+            app: backup
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: busybox:1.36
+              command:
+                - sh
+                - -c
+                - |
+                  FECHA=$(date +%Y%m%d_%H%M%S)
+                  echo "=== Backup iniciado: $FECHA ==="
+                  echo "Conectando a base de datos..."
+                  sleep 5
+                  echo "Exportando datos..."
+                  sleep 3
+                  echo "Comprimiendo backup..."
+                  sleep 2
+                  echo "=== Backup completado: backup_$FECHA.sql.gz ==="
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "64Mi"
+                limits:
+                  cpu: "200m"
+                  memory: "128Mi"

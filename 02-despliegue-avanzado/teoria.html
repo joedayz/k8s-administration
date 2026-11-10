@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Módulo 02 — Despliegue Avanzado y Configuración</title>
+<link rel="stylesheet" href="../assets/theory.css">
+</head>
+<body style="--accent:#7c3aed; --accent-dark:#5b21b6;">
+<div class="container">
+
+  <header class="module-header">
+    <span class="badge">Módulo 02 · 8h</span>
+    <h1>Despliegue Avanzado y Configuración</h1>
+    <p class="subtitle">Deployments, StatefulSets, Jobs/CronJobs, Helm y Kustomize.</p>
+  </header>
+
+  <section>
+    <h2>👤 Rol del administrador</h2>
+    <div class="role-box">
+      <p>Como admin, no diseñas los Deployments — pero sí eres responsable de que:</p>
+      <ul>
+        <li>Las aplicaciones se actualicen sin downtime</li>
+        <li>Los Jobs y CronJobs completen correctamente</li>
+        <li>Las aplicaciones con estado (bases de datos) tengan almacenamiento persistente</li>
+        <li>La configuración se gestione de forma consistente y segura</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>📘 Teoría</h2>
+
+    <div class="card">
+      <h3>Deployments y estrategias de actualización</h3>
+      <p>Un Deployment gestiona el ciclo de vida de pods sin estado. Dos estrategias:</p>
+      <table>
+        <thead><tr><th>Estrategia</th><th>Cómo funciona</th><th>Cuándo usarla</th></tr></thead>
+        <tbody>
+          <tr><td><code>RollingUpdate</code></td><td>Reemplaza pods gradualmente</td><td>Aplicaciones web, APIs</td></tr>
+          <tr><td><code>Recreate</code></td><td>Mata todos y levanta nuevos</td><td>Apps que no soportan múltiples versiones simultáneas</td></tr>
+        </tbody>
+      </table>
+      <p><strong>Parámetros clave para el admin:</strong></p>
+      <ul>
+        <li><code>maxUnavailable</code>: cuántos pods pueden estar caídos durante la actualización</li>
+        <li><code>maxSurge</code>: cuántos pods extra se crean temporalmente</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3>StatefulSets — Para aplicaciones con estado</h3>
+      <p>Diferencias críticas con Deployments:</p>
+      <ul>
+        <li>Los pods tienen <strong>identidad estable</strong> (nombre predecible: <code>pod-0</code>, <code>pod-1</code>)</li>
+        <li>Cada pod tiene su propio <strong>PersistentVolume</strong></li>
+        <li>Se crean y eliminan <strong>en orden</strong></li>
+        <li>Usan un <strong>Headless Service</strong> para DNS estable</li>
+      </ul>
+      <div class="note"><strong>Cuándo lo verá un admin:</strong> Bases de datos (MySQL, PostgreSQL, MongoDB, Redis), Elasticsearch, Kafka.</div>
+    </div>
+
+    <div class="card">
+      <h3>Jobs y CronJobs</h3>
+      <p><span class="pill">Job</span> tarea que se ejecuta una vez y termina (migraciones, backups puntuales)</p>
+      <p><span class="pill">CronJob</span> Job programado (backups nocturnos, reportes, limpieza de datos)</p>
+      <p><strong>El admin debe verificar:</strong></p>
+      <ul>
+        <li>Que los Jobs completan exitosamente</li>
+        <li>Que los Jobs fallidos no acumulan pods muertos</li>
+        <li>Que los CronJobs no se solapan</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3>Helm — Gestor de paquetes de Kubernetes</h3>
+      <p>Helm es al admin de k8s lo que apt/yum es al admin de Linux. Permite:</p>
+      <ul>
+        <li>Instalar aplicaciones complejas con un comando</li>
+        <li>Gestionar versiones y hacer rollback</li>
+        <li>Personalizar configuración sin modificar YAMLs directamente</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3>Kustomize — Personalización sin templates</h3>
+      <p>Alternativa a Helm integrada en <code>kubectl</code>. Permite tener una base común y aplicar "patches" por entorno (dev, staging, prod) sin duplicar YAMLs.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>🧪 Laboratorios</h2>
+    <div class="lab-grid">
+      <a class="lab-card basico" href="basico/README.md">Lab Básico<small>Deployments, actualizaciones y rollback</small></a>
+      <a class="lab-card intermedio" href="intermedio/README.md">Lab Intermedio<small>StatefulSets, Jobs y CronJobs</small></a>
+      <a class="lab-card avanzado" href="avanzado/README.md">Lab Avanzado<small>Helm y Kustomize para gestión multi-entorno</small></a>
+    </div>
+  </section>
+
+  <footer><a href="../index.html">← Volver al índice del curso</a></footer>
+</div>
+</body>
+</html>

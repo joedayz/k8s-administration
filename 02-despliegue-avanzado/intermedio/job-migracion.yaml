@@ -1,0 +1,38 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: job-migracion
+  namespace: produccion
+  labels:
+    app: migracion
+spec:
+  # Si falla, reintenta hasta 3 veces
+  backoffLimit: 3
+  # El Job y sus pods se limpian automáticamente 300s después de completar
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app: migracion
+    spec:
+      restartPolicy: OnFailure   # requerido en Jobs
+      containers:
+        - name: migracion
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "=== Iniciando migración de base de datos ==="
+              echo "Conectando a postgres-0.postgres-headless.produccion..."
+              sleep 5
+              echo "Ejecutando migraciones..."
+              sleep 3
+              echo "=== Migración completada exitosamente ==="
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"

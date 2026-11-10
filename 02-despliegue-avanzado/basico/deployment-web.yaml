@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-web
+  namespace: desarrollo
+  labels:
+    app: app-web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: app-web
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1   # máximo 1 pod fuera de servicio durante la actualización
+      maxSurge: 1         # máximo 1 pod extra durante la actualización
+  template:
+    metadata:
+      labels:
+        app: app-web
+        version: "1.0"
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.25-alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          # Probes que el admin debe configurar para garantizar disponibilidad
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 15
+            periodSeconds: 20
