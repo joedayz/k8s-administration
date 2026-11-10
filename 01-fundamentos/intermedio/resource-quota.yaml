@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: quota-produccion
+  namespace: produccion
+spec:
+  hard:
+    # Límite de objetos
+    pods: "10"
+    services: "5"
+    persistentvolumeclaims: "5"
+    # Límite de cómputo
+    requests.cpu: "2"
+    requests.memory: "4Gi"
+    limits.cpu: "4"
+    limits.memory: "8Gi"

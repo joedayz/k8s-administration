@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: desarrollo
+  labels:
+    entorno: desarrollo
+    equipo: backend
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: staging
+  labels:
+    entorno: staging
+    equipo: backend
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: produccion
+  labels:
+    entorno: produccion
+    equipo: backend

@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: banca
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: banca-config
+  namespace: banca
+data:
+  APP_ENV: "production"  
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: banca-api
+  namespace: banca
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: banca-api
+  template:
+    metadata:
+      labels:
+        app: banca-api
+    spec:
+      containers:
+        - name: banca-api
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+          envFrom:
+            - configMapRef:
+                name: banca-config
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+---  
+apiVersion: v1
+kind: Service
+metadata:
+  name: banca-service
+  namespace: banca
+spec:
+  selector:
+    app: banca-api
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP

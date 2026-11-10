@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-con-error
+  namespace: default
+spec:
+  containers:
+    - name: contenedor-error
+      # Imagen que no existe — genera ImagePullBackOff
+      image: nginx:version-que-no-existe
+      resources:
+        requests:
+          cpu: "50m"
+          memory: "64Mi"
+        limits:
+          cpu: "100m"
+          memory: "128Mi"
