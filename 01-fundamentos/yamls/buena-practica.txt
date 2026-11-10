@@ -1,0 +1,13 @@
+kubenetes/
+          namespaces/
+                    desarrollo.yaml
+                    pruebas.yaml        
+                    produccion.yaml
+          desarrollo/
+                    deployment.yaml 
+                    service.yaml
+                    configmap.yaml
+          produccion/
+                    deployment.yaml 
+                    service.yaml
+                    configmap.yaml                    
