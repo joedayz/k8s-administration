@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-escalable
+  namespace: produccion
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: app-escalable
+  template:
+    metadata:
+      labels:
+        app: app-escalable
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.25-alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: "100m"    # el HPA usa este valor como base para calcular %
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-escalable-svc
+  namespace: produccion
+spec:
+  selector:
+    app: app-escalable
+  ports:
+    - port: 80
+      targetPort: 80

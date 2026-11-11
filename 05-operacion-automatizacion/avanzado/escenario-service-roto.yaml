@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: servicio-roto
+  namespace: desarrollo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: servicio-roto-v2   # label real del pod
+  template:
+    metadata:
+      labels:
+        app: servicio-roto-v2   # label del pod
+    spec:
+      containers:
+        - name: app
+          image: hashicorp/http-echo:latest
+          args: ["-text=servicio funcionando"]
+          ports:
+            - containerPort: 5678
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "64Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: servicio-roto-svc
+  namespace: desarrollo
+spec:
+  selector:
+    app: servicio-roto   # ERROR: no coincide con el label del pod (servicio-roto-v2)
+  ports:
+    - port: 80
+      targetPort: 5678

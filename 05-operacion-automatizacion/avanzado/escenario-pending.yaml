@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-pending
+  namespace: desarrollo
+  labels:
+    escenario: pending
+spec:
+  containers:
+    - name: app
+      image: nginx:1.25-alpine
+      resources:
+        requests:
+          # Pide más CPU de la disponible en el cluster de lab
+          # Esto causa que el pod quede en Pending indefinidamente
+          cpu: "32"
+          memory: "64Gi"
+        limits:
+          cpu: "32"
+          memory: "64Gi"

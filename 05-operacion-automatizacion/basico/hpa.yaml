@@ -1,0 +1,24 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: app-escalable-hpa
+  namespace: produccion
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: app-escalable
+  minReplicas: 1    # nunca bajar de 1
+  maxReplicas: 5    # nunca subir de 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50   # escala cuando CPU > 50% del request
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30   # espera 30s antes de escalar hacia arriba
+    scaleDown:
+      stabilizationWindowSeconds: 120  # espera 2min antes de reducir réplicas

@@ -1,0 +1,9 @@
+apiVersion: labs.k8s.io/v1
+kind: Aplicacion
+metadata:
+  name: mi-app
+  namespace: desarrollo
+spec:
+  imagen: nginx:1.25-alpine
+  replicas: 2
+  entorno: desarrollo

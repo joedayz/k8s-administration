@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Módulo 05 — Operación y Automatización</title>
+<link rel="stylesheet" href="../assets/theory.css">
+</head>
+<body style="--accent:#16a34a; --accent-dark:#15803d;">
+<div class="container">
+
+  <header class="module-header">
+    <span class="badge">Módulo 05 · 8h</span>
+    <h1>Operación y Automatización</h1>
+    <p class="subtitle">Escalado (HPA/VPA), GitOps, CRDs/Operadores y Troubleshooting.</p>
+  </header>
+
+  <section>
+    <h2>👤 Rol del administrador</h2>
+    <div class="role-box">
+      <p>Este módulo es el más crítico para el día a día de un admin:</p>
+      <ul>
+        <li>Garantizar que las aplicaciones escalen cuando hay carga</li>
+        <li>Mantener el cluster saludable con backups y actualizaciones</li>
+        <li>Automatizar despliegues con GitOps para reducir errores humanos</li>
+        <li>Extender Kubernetes con operadores para gestionar software complejo</li>
+        <li>Diagnosticar y resolver problemas en producción bajo presión</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>📘 Teoría</h2>
+
+    <div class="card">
+      <h3>Escalado en Kubernetes</h3>
+      <table>
+        <thead><tr><th>Tipo</th><th>Qué escala</th><th>Cuándo usarlo</th></tr></thead>
+        <tbody>
+          <tr><td>Manual</td><td>Réplicas de un Deployment</td><td>Mantenimiento, ajustes puntuales</td></tr>
+          <tr><td><strong>HPA</strong> (Horizontal Pod Autoscaler)</td><td>Número de pods</td><td>Carga variable en aplicaciones</td></tr>
+          <tr><td><strong>VPA</strong> (Vertical Pod Autoscaler)</td><td>CPU/RAM de pods existentes</td><td>Optimizar recursos sin escalar réplicas</td></tr>
+          <tr><td><strong>Cluster Autoscaler</strong></td><td>Nodos del cluster</td><td>Cloud: añadir/quitar VMs automáticamente</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>GitOps</h3>
+      <p>GitOps es el paradigma donde <strong>Git es la fuente de verdad</strong> del estado del cluster. Nadie aplica YAMLs manualmente en producción — todo pasa por Git.</p>
+      <pre class="diagram">Developer → git push → Git repo → Argo CD/Flux → Kubernetes cluster</pre>
+      <p><strong>Ventajas para el admin:</strong></p>
+      <ul>
+        <li>Auditoría completa: quién cambió qué y cuándo</li>
+        <li>Rollback = <code>git revert</code></li>
+        <li>Menor riesgo de errores manuales</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3>CRDs y Operadores</h3>
+      <ul>
+        <li><strong>CRD (Custom Resource Definition)</strong>: extiende la API de Kubernetes con nuevos tipos de objetos</li>
+        <li><strong>Operador</strong>: controlador que gestiona aplicaciones complejas usando CRDs</li>
+      </ul>
+      <div class="note">Ejemplo: el operador de PostgreSQL gestiona clusters de bases de datos como si fueran objetos nativos de Kubernetes.</div>
+    </div>
+
+    <div class="card">
+      <h3>Troubleshooting — Metodología del admin</h3>
+      <pre class="diagram">1. ¿Qué está fallando?    → kubectl get pods/nodes
+2. ¿Por qué falla?        → kubectl describe / kubectl logs
+3. ¿Cuándo empezó?        → kubectl get events --sort-by=lastTimestamp
+4. ¿Qué cambió?           → git log / helm history
+5. ¿Cómo lo resuelvo?     → Según el diagnóstico
+6. ¿Cómo lo prevengo?     → Alertas, probes, recursos adecuados</pre>
+    </div>
+  </section>
+
+  <section>
+    <h2>🧪 Laboratorios</h2>
+    <div class="lab-grid">
+      <a class="lab-card basico" href="basico/README.md">Lab Básico<small>HPA, escalado manual y PodDisruptionBudget</small></a>
+      <a class="lab-card intermedio" href="intermedio/README.md">Lab Intermedio<small>Backup con Velero y GitOps con Argo CD</small></a>
+      <a class="lab-card avanzado" href="avanzado/README.md">Lab Avanzado<small>CRDs, operadores y troubleshooting avanzado</small></a>
+    </div>
+  </section>
+
+  <footer><a href="../index.html">← Volver al índice del curso</a></footer>
+</div>
+</body>
+</html>

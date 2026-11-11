@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-crashloop
+  namespace: desarrollo
+  labels:
+    escenario: crashloop
+spec:
+  containers:
+    - name: app
+      image: busybox:1.36
+      # Este comando falla siempre — causa CrashLoopBackOff
+      command: ["sh", "-c", "echo 'Iniciando app...' && exit 1"]
+      resources:
+        requests:
+          cpu: "50m"
+          memory: "32Mi"
+        limits:
+          cpu: "100m"
+          memory: "64Mi"
+  restartPolicy: Always

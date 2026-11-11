@@ -1,0 +1,11 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: app-escalable-pdb
+  namespace: produccion
+spec:
+  # Durante un drain o actualización, siempre debe haber al menos 1 pod disponible
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: app-escalable
