@@ -1,0 +1,27 @@
+# PVC con StorageClass que tiene política Retain
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: datos-retain
+  namespace: produccion
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path   # política Retain configurada en storage-classes.yaml
+  resources:
+    requests:
+      storage: 500Mi
+---
+# PVC con StorageClass que tiene política Delete (comportamiento por defecto)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: datos-delete
+  namespace: produccion
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 500Mi

@@ -1,0 +1,27 @@
+# Política de egress: controlar tráfico saliente desde producción
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: egress-produccion
+  namespace: produccion
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    # Permitir DNS (siempre necesario)
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Permitir comunicación con kube-system
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+    # Permitir comunicación con staging
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              entorno: staging

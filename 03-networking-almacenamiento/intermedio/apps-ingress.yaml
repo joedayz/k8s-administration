@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-frontend
+  namespace: desarrollo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: app-frontend
+  template:
+    metadata:
+      labels:
+        app: app-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: hashicorp/http-echo:latest
+          args: ["-text=FRONTEND: solicitud recibida"]
+          ports:
+            - containerPort: 5678
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "64Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-frontend-svc
+  namespace: desarrollo
+spec:
+  selector:
+    app: app-frontend
+  ports:
+    - port: 80
+      targetPort: 5678
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-backend-v2
+  namespace: desarrollo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: app-backend-v2
+  template:
+    metadata:
+      labels:
+        app: app-backend-v2
+    spec:
+      containers:
+        - name: backend
+          image: hashicorp/http-echo:latest
+          args: ["-text=BACKEND: solicitud recibida"]
+          ports:
+            - containerPort: 5678
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "64Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-backend-v2-svc
+  namespace: desarrollo
+spec:
+  selector:
+    app: app-backend-v2
+  ports:
+    - port: 80
+      targetPort: 5678

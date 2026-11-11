@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: datos-app
+  namespace: desarrollo
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  # En k3s hay una StorageClass por defecto (local-path)
+  # No es necesario especificar storageClassName

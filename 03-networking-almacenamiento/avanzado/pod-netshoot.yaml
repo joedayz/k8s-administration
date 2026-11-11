@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: netshoot
+  namespace: kube-system
+  labels:
+    app: netshoot
+spec:
+  containers:
+    - name: netshoot
+      # Imagen con herramientas de red: curl, nslookup, ss, ping, tcpdump, etc.
+      image: nicolaka/netshoot:latest
+      command: ["sleep", "3600"]
+      resources:
+        requests:
+          cpu: "50m"
+          memory: "64Mi"
+        limits:
+          cpu: "100m"
+          memory: "128Mi"
+  # Necesario para tcpdump y diagnósticos de red avanzados
+  hostNetwork: false

@@ -1,0 +1,13 @@
+# Política de bloqueo total — usada para demostrar diagnóstico
+# CUIDADO: bloquea todo el tráfico entrante al namespace produccion
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bloqueo-total
+  namespace: produccion
+spec:
+  podSelector: {}   # aplica a todos los pods
+  policyTypes:
+    - Ingress
+    - Egress
+  # Sin reglas ingress ni egress = bloqueo total

@@ -1,0 +1,19 @@
+# Política de aislamiento: solo los pods del mismo namespace pueden comunicarse
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: aislamiento-namespace
+  namespace: desarrollo
+spec:
+  podSelector: {}   # aplica a TODOS los pods del namespace
+  policyTypes:
+    - Ingress
+  ingress:
+    # Solo se permite tráfico desde pods del mismo namespace
+    - from:
+        - podSelector: {}
+    # Permitir también desde kube-system (DNS, health checks)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
