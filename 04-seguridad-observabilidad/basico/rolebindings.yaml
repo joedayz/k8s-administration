@@ -1,0 +1,43 @@
+# Asignar rol de lectura al ServiceAccount app-reader
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: app-reader-binding
+  namespace: produccion
+subjects:
+  - kind: ServiceAccount
+    name: app-reader
+    namespace: produccion
+roleRef:
+  kind: Role
+  name: lector-pods
+  apiGroup: rbac.authorization.k8s.io
+---
+# Asignar rol de gestor de deployments
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: deployment-manager-binding
+  namespace: produccion
+subjects:
+  - kind: ServiceAccount
+    name: deployment-manager
+    namespace: produccion
+roleRef:
+  kind: Role
+  name: gestor-deployments
+  apiGroup: rbac.authorization.k8s.io
+---
+# Asignar ClusterRole de lectura al grupo de admins junior
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: admins-junior-reader
+subjects:
+  - kind: Group
+    name: admins-junior   # grupo de usuarios
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: lector-cluster
+  apiGroup: rbac.authorization.k8s.io

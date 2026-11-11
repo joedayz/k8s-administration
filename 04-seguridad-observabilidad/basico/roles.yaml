@@ -1,0 +1,38 @@
+# Rol de solo lectura de pods y logs (típico para herramientas de monitoreo)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: lector-pods
+  namespace: produccion
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "pods/status"]
+    verbs: ["get", "list", "watch"]
+---
+# Rol para gestionar deployments (típico para pipelines CI/CD)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gestor-deployments
+  namespace: produccion
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  # NO puede eliminar deployments ni acceder a secrets
+---
+# ClusterRole para administradores de nodos (solo lectura del cluster)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: lector-cluster
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "namespaces", "persistentvolumes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list"]

@@ -1,0 +1,54 @@
+# Valores optimizados para entorno de laboratorio (recursos reducidos)
+
+grafana:
+  adminPassword: "Admin1234!"
+  persistence:
+    enabled: false   # sin persistencia en lab
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+
+prometheus:
+  prometheusSpec:
+    retention: 24h   # solo 24h de métricas en lab
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "512Mi"
+      limits:
+        cpu: "500m"
+        memory: "1Gi"
+    storageSpec: {}   # sin persistencia en lab
+
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
+
+# Reducir recursos de los exportadores
+nodeExporter:
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "32Mi"
+    limits:
+      cpu: "100m"
+      memory: "64Mi"
+
+kubeStateMetrics:
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "100m"
+      memory: "128Mi"

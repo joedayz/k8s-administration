@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Módulo 04 — Seguridad y Observabilidad</title>
+<link rel="stylesheet" href="../assets/theory.css">
+</head>
+<body style="--accent:#dc2626; --accent-dark:#991b1b;">
+<div class="container">
+
+  <header class="module-header">
+    <span class="badge">Módulo 04 · 10h</span>
+    <h1>Seguridad y Observabilidad</h1>
+    <p class="subtitle">RBAC, Secrets/ConfigMaps y los tres pilares de observabilidad.</p>
+  </header>
+
+  <section>
+    <h2>👤 Rol del administrador</h2>
+    <div class="role-box">
+      <p>La seguridad y la observabilidad son el núcleo del trabajo de un admin en producción:</p>
+      <ul>
+        <li>Controlar <strong>quién</strong> puede hacer <strong>qué</strong> en el cluster (RBAC)</li>
+        <li>Gestionar <strong>credenciales y configuración</strong> de forma segura (Secrets, ConfigMaps)</li>
+        <li>Garantizar que el cluster es <strong>observable</strong>: métricas, logs y alertas</li>
+        <li>Responder a incidentes con datos, no con suposiciones</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>📘 Teoría</h2>
+
+    <div class="card">
+      <h3>RBAC — Control de Acceso Basado en Roles</h3>
+      <p>RBAC responde a la pregunta: ¿quién puede hacer qué sobre qué recursos?</p>
+      <pre class="diagram">Subject (¿quién?)     Verb (¿qué?)     Resource (¿sobre qué?)
+──────────────────    ─────────────    ──────────────────────
+User / ServiceAccount get, list,       pods, deployments,
+Group                 create, delete,  services, secrets,
+                      update, patch,   nodes, namespaces...
+                      watch</pre>
+      <p><strong>Objetos RBAC:</strong></p>
+      <ul>
+        <li><code>Role</code> / <code>ClusterRole</code>: define los permisos</li>
+        <li><code>RoleBinding</code> / <code>ClusterRoleBinding</code>: asigna los permisos a un subject</li>
+      </ul>
+      <table>
+        <thead><tr><th>Objeto</th><th>Alcance</th></tr></thead>
+        <tbody>
+          <tr><td><code>Role</code></td><td>Un namespace</td></tr>
+          <tr><td><code>ClusterRole</code></td><td>Todo el cluster</td></tr>
+          <tr><td><code>RoleBinding</code></td><td>Asigna Role o ClusterRole en un namespace</td></tr>
+          <tr><td><code>ClusterRoleBinding</code></td><td>Asigna ClusterRole en todo el cluster</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>Secrets y ConfigMaps</h3>
+      <table>
+        <thead><tr><th>Objeto</th><th>Para qué</th><th>Cómo se monta</th></tr></thead>
+        <tbody>
+          <tr><td><code>ConfigMap</code></td><td>Configuración no sensible</td><td>Variables de entorno o archivos</td></tr>
+          <tr><td><code>Secret</code></td><td>Credenciales, tokens, certificados</td><td>Variables de entorno o archivos</td></tr>
+        </tbody>
+      </table>
+      <div class="note"><strong>Importante:</strong> Los Secrets en Kubernetes están codificados en base64, NO cifrados por defecto. Para cifrado real se usa Sealed Secrets, Vault o cifrado en reposo de etcd.</div>
+    </div>
+
+    <div class="card">
+      <h3>Observabilidad — Los tres pilares</h3>
+      <ol>
+        <li><strong>Métricas</strong>: datos numéricos a lo largo del tiempo → Prometheus + Grafana</li>
+        <li><strong>Logs</strong>: eventos de texto de los componentes → Loki, Elasticsearch</li>
+        <li><strong>Trazas</strong>: flujo de una petición entre servicios → Jaeger, Tempo</li>
+      </ol>
+      <p>En k3s, el stack mínimo de observabilidad es:</p>
+      <ul>
+        <li><span class="pill">metrics-server</span> (incluido) → <code>kubectl top</code></li>
+        <li><span class="pill">Prometheus + Grafana</span> → se instala con Helm</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>🧪 Laboratorios</h2>
+    <div class="lab-grid">
+      <a class="lab-card basico" href="basico/README.md">Lab Básico<small>RBAC: usuarios, roles y permisos</small></a>
+      <a class="lab-card intermedio" href="intermedio/README.md">Lab Intermedio<small>Secrets, ConfigMaps y Pod Security</small></a>
+      <a class="lab-card avanzado" href="avanzado/README.md">Lab Avanzado<small>Prometheus, Grafana y alertas</small></a>
+    </div>
+  </section>
+
+  <footer><a href="../index.html">← Volver al índice del curso</a></footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-configurado
+  namespace: produccion
+spec:
+  containers:
+    - name: app
+      image: busybox:1.36
+      command: ["sh", "-c", "env && echo '---' && cat /etc/config/app.properties && sleep 3600"]
+      # Variables de entorno desde ConfigMap
+      envFrom:
+        - configMapRef:
+            name: app-config
+      env:
+        # Variables desde Secret (individuales para mayor control)
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-credentials
+              key: db-password
+        - name: API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: app-credentials
+              key: api-key
+      volumeMounts:
+        # Montar el archivo de configuración
+        - name: config-file
+          mountPath: /etc/config
+          readOnly: true
+      resources:
+        requests:
+          cpu: "50m"
+          memory: "32Mi"
+        limits:
+          cpu: "100m"
+          memory: "64Mi"
+  volumes:
+    - name: config-file
+      configMap:
+        name: app-config
+        items:
+          - key: app.properties
+            path: app.properties

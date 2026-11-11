@@ -1,0 +1,77 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: alertas-administrador
+  namespace: monitoreo
+  labels:
+    # Esta label es necesaria para que Prometheus recoja las reglas
+    release: prometheus
+spec:
+  groups:
+    - name: cluster.critico
+      interval: 1m
+      rules:
+        # Nodo no disponible
+        - alert: NodoCaido
+          expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+          for: 2m
+          labels:
+            severity: critico
+          annotations:
+            summary: "Nodo {{ $labels.node }} no está Ready"
+            description: "El nodo {{ $labels.node }} lleva más de 2 minutos sin responder."
+
+        # Poco espacio en disco
+        - alert: DiskoPorAcabarse
+          expr: |
+            (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 15
+          for: 5m
+          labels:
+            severity: advertencia
+          annotations:
+            summary: "Disco al {{ $value | humanize }}% de disponibilidad en {{ $labels.instance }}"
+            description: "El nodo {{ $labels.instance }} tiene menos del 15% de disco disponible."
+
+        # Memoria alta en nodo
+        - alert: MemoriaAltaNodo
+          expr: |
+            (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+          for: 5m
+          labels:
+            severity: advertencia
+          annotations:
+            summary: "Memoria al {{ $value | humanize }}% en {{ $labels.instance }}"
+            description: "El nodo {{ $labels.instance }} lleva 5 minutos con más del 85% de memoria usada."
+
+    - name: pods.problemas
+      interval: 1m
+      rules:
+        # Pod reiniciando frecuentemente (CrashLoopBackOff)
+        - alert: PodReiniciandoMucho
+          expr: increase(kube_pod_container_status_restarts_total[15m]) > 3
+          for: 0m
+          labels:
+            severity: advertencia
+          annotations:
+            summary: "Pod {{ $labels.pod }} reiniciando frecuentemente"
+            description: "El pod {{ $labels.pod }} en namespace {{ $labels.namespace }} ha reiniciado {{ $value }} veces en 15 minutos."
+
+        # Pod en estado Pending por mucho tiempo
+        - alert: PodPendienteMucho
+          expr: kube_pod_status_phase{phase="Pending"} == 1
+          for: 10m
+          labels:
+            severity: advertencia
+          annotations:
+            summary: "Pod {{ $labels.pod }} lleva 10 minutos en Pending"
+            description: "El pod {{ $labels.pod }} en {{ $labels.namespace }} no ha podido ser schedulado."
+
+        # Pod en OOMKilled
+        - alert: PodOOMKilled
+          expr: kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
+          for: 0m
+          labels:
+            severity: critico
+          annotations:
+            summary: "Pod {{ $labels.pod }} fue terminado por falta de memoria"
+            description: "El container {{ $labels.container }} en {{ $labels.pod }} fue OOMKilled. Considera aumentar el memory limit."

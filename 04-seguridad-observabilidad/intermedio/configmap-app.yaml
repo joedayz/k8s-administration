@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: produccion
+data:
+  # Variables de entorno
+  APP_ENV: "produccion"
+  APP_LOG_LEVEL: "INFO"
+  APP_PORT: "8080"
+  DB_HOST: "postgres-0.postgres-headless.produccion.svc.cluster.local"
+  DB_PORT: "5432"
+  DB_NAME: "appdb"
+
+  # Archivo de configuración completo
+  app.properties: |
+    environment=produccion
+    log.level=INFO
+    server.port=8080
+    db.host=postgres-0.postgres-headless.produccion.svc.cluster.local
+    db.port=5432
+    db.name=appdb
+    cache.ttl=300
+    feature.nueva-ui=false
