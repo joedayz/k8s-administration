@@ -8,17 +8,17 @@ metadata:
     traefik.ingress.kubernetes.io/router.entrypoints: web
 spec:
   rules:
-    - host: app.lab.local
+    - host: app.lab.local # http://app.lab.local
       http:
         paths:
-          - path: /frontend
+          - path: /frontend # http://app.lab.local/frontend
             pathType: Prefix
             backend:
               service:
                 name: app-frontend-svc
                 port:
                   number: 80
-          - path: /backend
+          - path: /backend # 
             pathType: Prefix
             backend:
               service:
