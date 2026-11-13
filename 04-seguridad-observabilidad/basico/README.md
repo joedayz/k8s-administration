@@ -113,6 +113,14 @@ kubectl config set-context juan-context --cluster=default --user=juan
 ### Paso 6 — Asignar rol al usuario juan y verificar
 
 ```bash
+# El rol "lector-pods" se creó en el namespace "produccion" (Paso 2).
+# Como un Role es un recurso namespaced, hay que crearlo también en "desarrollo"
+# para poder asignarlo ahí con un RoleBinding.
+kubectl create role lector-pods \
+  --verb=get,list,watch \
+  --resource=pods,pods/log,pods/status \
+  --namespace=desarrollo
+
 # Asignar rol de solo lectura en desarrollo
 kubectl create rolebinding juan-reader \
   --role=lector-pods \
@@ -136,6 +144,34 @@ rm juan.key juan.crt juan.csr
 # Ver todos los RoleBindings del cluster
 kubectl get rolebindings -A
 kubectl get clusterrolebindings | grep -v system
+```
+
+---
+
+## Limpieza
+
+Estos recursos son exclusivos de este lab: ningún nivel intermedio o avanzado de este módulo los reutiliza.
+
+```bash
+# RoleBindings y ClusterRoleBinding
+kubectl delete rolebinding app-reader-binding deployment-manager-binding -n produccion
+kubectl delete rolebinding juan-reader -n desarrollo
+kubectl delete clusterrolebinding admins-junior-reader
+
+# Roles y ClusterRole
+kubectl delete role lector-pods gestor-deployments -n produccion
+kubectl delete role lector-pods -n desarrollo
+kubectl delete clusterrole lector-cluster
+
+# ServiceAccounts
+kubectl delete serviceaccount app-reader deployment-manager -n produccion
+
+# CertificateSigningRequest de juan
+kubectl delete csr juan
+
+# Contexto y credenciales locales de juan en el kubeconfig
+kubectl config delete-context juan-context
+kubectl config unset users.juan
 ```
 
 ---

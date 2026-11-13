@@ -139,12 +139,16 @@ kubectl logs deployment/prometheus-grafana -n monitoreo --since=30m
 
 ---
 
-## Limpiar
+## Limpieza
+
+Estos recursos son exclusivos de este lab. El namespace `monitoreo` no se reutiliza en otros labs, así que basta con desinstalar el release de Helm y borrar el namespace (esto arrastra Prometheus, Grafana, Alertmanager, el `PrometheusRule` de `alertas-admin.yaml` y los exportadores).
 
 ```bash
 helm uninstall prometheus -n monitoreo
 kubectl delete namespace monitoreo
 ```
+
+Si dejaste abiertos los `kubectl port-forward` de los Pasos 2 y 3, detenlos con `Ctrl+C` en sus terminales.
 
 ---
 

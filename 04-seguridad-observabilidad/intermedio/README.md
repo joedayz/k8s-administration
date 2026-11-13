@@ -115,6 +115,29 @@ kubectl get pods -n desarrollo
 
 ---
 
+## Limpieza
+
+Estos recursos son exclusivos de este lab: el nivel avanzado de este módulo no los reutiliza. `produccion`, `desarrollo` y `staging` son namespaces compartidos con otros labs, así que no se borran — solo los objetos creados aquí (y el label de PSS aplicado a `staging`).
+
+```bash
+# ConfigMap y Secret
+kubectl delete configmap app-config -n produccion
+kubectl delete secret app-credentials -n produccion
+
+# Pods de seguridad
+kubectl delete pod pod-inseguro pod-seguro -n desarrollo
+
+# Pod privilegiado (si llegó a crearse pese al rechazo de admisión)
+kubectl delete pod pod-privilegiado -n staging --ignore-not-found
+
+# Quitar las labels de Pod Security Standards del namespace staging
+kubectl label namespace staging \
+  pod-security.kubernetes.io/enforce- \
+  pod-security.kubernetes.io/warn-
+```
+
+---
+
 ## Preguntas de reflexión para el instructor
 
 1. ¿Por qué base64 NO es cifrado? ¿Qué alternativas existen para cifrar Secrets?
