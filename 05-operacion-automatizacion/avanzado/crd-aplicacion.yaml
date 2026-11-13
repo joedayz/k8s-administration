@@ -1,9 +1,13 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: aplicaciones.labs.k8s.io
+  # El grupo NO puede terminar en ".k8s.io" ni ".kubernetes.io": esos
+  # sufijos están reservados para el propio proyecto Kubernetes y el
+  # API server exige una anotación de aprobación que no tenemos. Se usa
+  # un dominio propio, como recomienda la documentación oficial.
+  name: aplicaciones.labs.example.com
 spec:
-  group: labs.k8s.io
+  group: labs.example.com
   versions:
     - name: v1
       served: true

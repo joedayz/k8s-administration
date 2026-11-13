@@ -27,7 +27,7 @@ kubectl api-resources | grep -v "^NAME"
 kubectl apply -f crd-aplicacion.yaml
 
 # Ver el nuevo tipo de recurso
-kubectl get crd aplicaciones.labs.k8s.io
+kubectl get crd aplicaciones.labs.example.com
 kubectl api-resources | grep aplicaciones
 
 # Crear un objeto del nuevo tipo
