@@ -39,20 +39,29 @@ El HPA necesita metrics-server para leer el consumo de CPU (en k3s viene incluid
 # En una terminal: observar el HPA en tiempo real
 kubectl get hpa app-escalable-hpa -n produccion -w
 
-# En otra terminal: generar carga
-kubectl run generador-carga \
-  --image=busybox:1.36 \
-  --restart=Never \
-  -n produccion \
-  -- sh -c "while true; do wget -qO- http://app-escalable-svc.produccion.svc.cluster.local; done"
+# En otra terminal: generar carga con VARIOS clientes concurrentes.
+# Un solo wget secuencial (sin keep-alive) no sostiene suficiente CPU:
+# además, el HPA tiene una banda de tolerancia del 10% por defecto y
+# NO escala si el uso está entre 45%-55% con un target de 50%. Por eso
+# usamos 5 pods generando carga en paralelo, para superar claramente
+# ese umbral.
+for i in 1 2 3 4 5; do
+  kubectl run generador-carga-$i \
+    --image=busybox:1.36 \
+    --restart=Never \
+    --labels=app=generador-carga \
+    -n produccion \
+    -- sh -c "while true; do wget -qO- http://app-escalable-svc.produccion.svc.cluster.local; done"
+done
 
 # Observar cómo el HPA aumenta las réplicas automáticamente
-# Cuando la CPU supera el 50%, añade pods
+# Con carga concurrente la CPU debería superar el 55% y disparar el escalado
 
 # Detener la carga
-kubectl delete pod generador-carga -n produccion
+kubectl delete pod -n produccion -l app=generador-carga
 
-# Observar cómo el HPA reduce las réplicas (tarda unos minutos)
+# Observar cómo el HPA reduce las réplicas (tarda unos minutos, por el
+# stabilizationWindowSeconds de scaleDown en hpa.yaml)
 kubectl get hpa app-escalable-hpa -n produccion -w
 ```
 
@@ -103,6 +112,22 @@ kubectl describe hpa app-escalable-hpa -n produccion | grep -A10 "Metrics:"
 ```bash
 kubectl get hpa -n produccion
 kubectl get pdb -n produccion
+```
+
+---
+
+## Limpieza
+
+Estos recursos son exclusivos de este lab: ningún nivel intermedio o avanzado de este módulo los reutiliza. `produccion` es un namespace compartido con otros labs, así que no se borra — solo los objetos creados aquí.
+
+```bash
+kubectl delete hpa app-escalable-hpa -n produccion
+kubectl delete pdb app-escalable-pdb -n produccion
+kubectl delete deployment app-escalable -n produccion
+kubectl delete service app-escalable-svc -n produccion
+
+# Por si quedó algún generador de carga sin borrar
+kubectl delete pod -n produccion -l app=generador-carga --ignore-not-found
 ```
 
 ---
