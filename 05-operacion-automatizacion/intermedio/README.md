@@ -121,7 +121,12 @@ velero schedule get
 ```bash
 kubectl create namespace argocd
 
-kubectl apply -n argocd -f \
+# --server-side: el manifiesto de Argo CD es muy grande y con un apply
+# normal (client-side) puede fallar porque el annotation
+# "kubectl.kubernetes.io/last-applied-configuration" supera el límite de
+# tamaño de metadata. El modo server-side delega el merge al API server
+# y evita ese error.
+kubectl apply --server-side -n argocd -f \
   https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
 # Esperar a que todos los pods estén listos
@@ -193,6 +198,32 @@ argocd app history app-produccion
 velero backup get
 velero schedule get
 argocd app list
+```
+
+---
+
+## Limpieza
+
+Estos recursos son exclusivos de este lab: ningún otro módulo reutiliza `velero`, `minio` o `argocd`.
+
+```bash
+# Si dejaste corriendo el port-forward del Paso 2.1, detenlo con Ctrl+C
+
+# Velero (borra CRDs, ClusterRoleBinding, el Deployment y el namespace "velero")
+velero uninstall --force
+
+# MinIO queda en el mismo namespace "velero", así que ya se borró con lo anterior;
+# si lo instalaste por separado o quedó algo suelto, confírmalo con:
+kubectl delete namespace velero --ignore-not-found
+
+# Argo CD
+kubectl delete --server-side -n argocd -f \
+  https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml --ignore-not-found
+kubectl delete namespace argocd --ignore-not-found
+
+# Si la Application "app-produccion" no tenía auto-prune efectivo, revisa
+# que no haya quedado nada desplegado por GitOps en "desarrollo"
+kubectl get all -n desarrollo
 ```
 
 ---
