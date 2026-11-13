@@ -242,6 +242,26 @@ echo "=== HPAS ===" && kubectl get hpa -A
 
 ---
 
+## Limpieza
+
+Estos recursos son exclusivos de este lab. Los escenarios 1, 2 y 3 de troubleshooting ya se limpian dentro de cada paso (el escenario 4 es solo diagnóstico, no crea recursos). `desarrollo` es un namespace compartido con otros labs — no se borra, solo los objetos creados aquí.
+
+```bash
+# Certificado, Issuer, Secret y objeto del CRD (namespace "desarrollo")
+kubectl delete certificate app-tls-cert -n desarrollo --ignore-not-found
+kubectl delete issuer selfsigned-issuer -n desarrollo --ignore-not-found
+kubectl delete secret app-tls-cert -n desarrollo --ignore-not-found
+kubectl delete aplicacion mi-app -n desarrollo --ignore-not-found
+
+# CRD personalizado (recurso cluster-scoped, se lleva consigo cualquier objeto "Aplicacion" restante)
+kubectl delete -f crd-aplicacion.yaml --ignore-not-found
+
+# cert-manager (Deployment, CRDs propios, webhooks y su namespace)
+kubectl delete -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml --ignore-not-found
+```
+
+---
+
 ## Preguntas de reflexión finales del curso
 
 1. ¿Cómo organizarías el trabajo de un equipo de admins para que nadie haga cambios manuales en producción?
