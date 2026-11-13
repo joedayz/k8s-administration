@@ -1,0 +1,23 @@
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: critico
+value: 1000000
+globalDefault: false
+description: "Workloads críticos de producción — nunca se expulsan si hay alternativa"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: normal
+value: 10000
+globalDefault: true
+description: "Prioridad por defecto para workloads estándar"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: batch-jobs
+value: 100
+globalDefault: false
+description: "Jobs batch de baja prioridad — primeros en ser expulsados"

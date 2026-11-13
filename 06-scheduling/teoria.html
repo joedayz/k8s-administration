@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Módulo 06 — Scheduling Avanzado</title>
+<link rel="stylesheet" href="../assets/theory.css">
+</head>
+<body style="--accent:#7c3aed; --accent-dark:#5b21b6;">
+<div class="container">
+
+  <header class="module-header">
+    <span class="badge">Módulo 06 · 4h</span>
+    <h1>Scheduling Avanzado</h1>
+    <p class="subtitle">Taints, Tolerations, Affinity, DaemonSets, PriorityClasses y Static Pods.</p>
+  </header>
+
+  <section>
+    <h2>👤 Rol del administrador</h2>
+    <div class="role-box">
+      <p>El scheduler decide dónde corre cada pod. Como admin necesitas:</p>
+      <ul>
+        <li>Controlar en qué nodos se despliegan workloads específicos (seguridad, rendimiento)</li>
+        <li>Aislar cargas de trabajo sensibles en nodos dedicados</li>
+        <li>Garantizar que agentes de sistema corran en TODOS los nodos</li>
+        <li>Gestionar prioridades cuando el cluster está bajo presión de recursos</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>📘 Teoría</h2>
+
+    <div class="card">
+      <h3>¿Cómo decide el scheduler dónde poner un pod?</h3>
+      <p>El kube-scheduler sigue dos fases:</p>
+      <pre class="diagram">1. FILTRADO   → elimina nodos que NO pueden ejecutar el pod
+               (recursos insuficientes, taints sin toleración, affinity...)
+2. PUNTUACIÓN → rankea los nodos restantes y elige el mejor
+               (balanceo de carga, afinidad preferida...)</pre>
+    </div>
+
+    <div class="card">
+      <h3>Taints y Tolerations</h3>
+      <p>Los <strong>taints</strong> marcan un nodo para repeler pods. Las <strong>tolerations</strong> permiten a un pod ignorar ese rechazo.</p>
+      <pre class="diagram">Nodo con taint  ──repele──▶  Pod sin toleración  (no se agenda)
+                            Pod con toleración   (sí se agenda)</pre>
+      <table>
+        <thead><tr><th>Efecto</th><th>Comportamiento</th></tr></thead>
+        <tbody>
+          <tr><td><code>NoSchedule</code></td><td>Pods nuevos sin toleración NO se agendan en el nodo</td></tr>
+          <tr><td><code>PreferNoSchedule</code></td><td>Se intenta evitar el nodo pero no es obligatorio</td></tr>
+          <tr><td><code>NoExecute</code></td><td>Pods sin toleración son expulsados del nodo</td></tr>
+        </tbody>
+      </table>
+      <div class="note"><strong>Caso de uso real:</strong> nodo dedicado a base de datos, nodo de GPU, nodo de control-plane.</div>
+    </div>
+
+    <div class="card">
+      <h3>Node Affinity y Pod Affinity</h3>
+      <p>A diferencia de NodeSelector (simple igualdad), la <strong>affinity</strong> permite expresiones complejas:</p>
+      <table>
+        <thead><tr><th>Tipo</th><th>Qué hace</th></tr></thead>
+        <tbody>
+          <tr><td><code>requiredDuringScheduling...</code></td><td>Obligatorio — el pod no arranca si no hay nodo que cumpla</td></tr>
+          <tr><td><code>preferredDuringScheduling...</code></td><td>Preferido — el scheduler lo intenta pero no falla</td></tr>
+          <tr><td><code>podAffinity</code></td><td>El pod quiere estar JUNTO a otros pods con ciertos labels</td></tr>
+          <tr><td><code>podAntiAffinity</code></td><td>El pod quiere estar LEJOS de otros pods (alta disponibilidad)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>DaemonSet</h3>
+      <p>Un DaemonSet garantiza que <strong>exactamente un pod</strong> corre en cada nodo del cluster (o en los nodos seleccionados). Ideal para:</p>
+      <ul>
+        <li>Agentes de monitoreo (node-exporter, Datadog agent)</li>
+        <li>Agentes de logs (Fluentd, Filebeat)</li>
+        <li>Agentes de red (kube-proxy, CNI plugins)</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3>PriorityClass</h3>
+      <p>Cuando el cluster está saturado, el scheduler expulsa pods de baja prioridad para hacer sitio a los de alta prioridad.</p>
+      <pre class="diagram">PriorityClass "critico"      value: 1000000  ← nunca se expulsa
+PriorityClass "normal"       value: 100
+PriorityClass "batch-jobs"   value: 10       ← primero en ser expulsado</pre>
+    </div>
+
+    <div class="card">
+      <h3>Static Pods</h3>
+      <p>Los static pods son gestionados directamente por <strong>kubelet</strong>, sin pasar por el API server. Se definen como YAML en un directorio específico del nodo.</p>
+      <ul>
+        <li>kubeadm: <code>/etc/kubernetes/manifests/</code></li>
+        <li>k3s server: <code>/var/lib/rancher/k3s/server/manifests/</code></li>
+        <li>k3s agent: <code>/var/lib/rancher/k3s/agent/pod-manifests/</code></li>
+      </ul>
+      <div class="note"><strong>Importante:</strong> Los static pods no se pueden eliminar con <code>kubectl delete</code> — hay que borrar el archivo del manifest.</div>
+    </div>
+
+  </section>
+
+  <section>
+    <h2>🧪 Laboratorios</h2>
+    <div class="lab-grid">
+      <a class="lab-card basico" href="basico/README.md">Lab Básico<small>Taints, Tolerations y NodeSelector</small></a>
+      <a class="lab-card intermedio" href="intermedio/README.md">Lab Intermedio<small>Node Affinity, Pod AntiAffinity y DaemonSets</small></a>
+      <a class="lab-card avanzado" href="avanzado/README.md">Lab Avanzado<small>PriorityClass, Static Pods y Topology Spread</small></a>
+    </div>
+  </section>
+
+  <footer>
+    <p><a href="../index.html">← Volver al índice</a></p>
+  </footer>
+
+</div>
+</body>
+</html>

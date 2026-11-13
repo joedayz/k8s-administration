@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-spread
+  namespace: scheduling
+spec:
+  replicas: 6
+  selector:
+    matchLabels:
+      app: app-spread
+  template:
+    metadata:
+      labels:
+        app: app-spread
+    spec:
+      topologySpreadConstraints:
+      - maxSkew: 1           # diferencia máxima entre nodos
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app: app-spread
+      containers:
+      - name: app
+        image: nginx:alpine
+        resources:
+          requests:
+            cpu: "20m"
+            memory: "32Mi"
+          limits:
+            cpu: "50m"
+            memory: "64Mi"

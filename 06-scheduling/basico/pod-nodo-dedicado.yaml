@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-nodo-dedicado
+  namespace: scheduling
+  labels:
+    app: db
+    tier: backend
+spec:
+  # nodeSelector fuerza el nodo por label
+  nodeSelector:
+    kubernetes.io/hostname: k3s-worker
+  # La toleración permite entrar al nodo tainteado
+  tolerations:
+  - key: "tier"
+    operator: "Equal"
+    value: "frontend"
+    effect: "NoSchedule"
+  containers:
+  - name: postgres
+    image: postgres:15-alpine
+    env:
+    - name: POSTGRES_PASSWORD
+      value: "cursok8s"
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "200m"
+        memory: "256Mi"

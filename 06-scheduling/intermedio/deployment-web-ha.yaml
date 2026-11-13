@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-ha
+  namespace: scheduling
+  labels:
+    app: web-ha
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web-ha
+  template:
+    metadata:
+      labels:
+        app: web-ha
+    spec:
+      affinity:
+        podAntiAffinity:
+          # REQUIRED: nunca dos réplicas en el mismo nodo
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - web-ha
+            topologyKey: kubernetes.io/hostname  # clave: por nodo
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "100m"
+            memory: "128Mi"
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
