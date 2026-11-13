@@ -20,7 +20,10 @@ spec:
     spec:
       containers:
         - name: minio
-          image: minio/minio:latest
+          # minio/minio:latest ya no se puede descargar de Docker Hub (el
+          # proyecto fue archivado en 2026); usamos el mirror de bitnami
+          # legacy, igual que el ejemplo oficial de Velero.
+          image: bitnamilegacy/minio:latest
           args: ["server", "/data", "--console-address", ":9001"]
           env:
             - name: MINIO_ROOT_USER
@@ -42,23 +45,6 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
-      initContainers:
-        - name: create-bucket
-          image: minio/mc:latest
-          command:
-            - sh
-            - -c
-            - |
-              sleep 5
-              mc alias set local http://localhost:9000 minio minio123
-              mc mb local/velero-backups --ignore-existing
-          resources:
-            requests:
-              cpu: "50m"
-              memory: "32Mi"
-            limits:
-              cpu: "100m"
-              memory: "64Mi"
       volumes:
         - name: data
           emptyDir: {}
@@ -76,3 +62,36 @@ spec:
       name: api
     - port: 9001
       name: console
+---
+# Crea el bucket "velero-backups" una vez que MinIO está arriba.
+# Se usa un Job (no un initContainer del mismo pod) porque los
+# initContainers corren ANTES que el contenedor principal: intentar
+# conectarse a MinIO ahí siempre fallaría. El Job reintenta
+# (restartPolicy: OnFailure) hasta que el Service "minio" responda.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-setup
+  namespace: velero
+spec:
+  template:
+    metadata:
+      name: minio-setup
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mc
+          image: bitnamilegacy/minio-client:latest
+          command:
+            - sh
+            - -c
+            - |
+              mc alias set local http://minio.velero.svc.cluster.local:9000 minio minio123 && \
+              mc mb local/velero-backups --ignore-existing
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "64Mi"

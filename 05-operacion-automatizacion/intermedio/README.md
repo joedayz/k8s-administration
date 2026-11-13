@@ -34,6 +34,9 @@ kubectl apply -f minio.yaml
 # Esperar a que MinIO esté listo
 kubectl rollout status deployment/minio -n velero
 
+# Esperar a que el Job cree el bucket "velero-backups"
+kubectl wait --for=condition=complete job/minio-setup -n velero --timeout=2m
+
 # Instalar Velero apuntando a MinIO
 velero install \
   --provider aws \
@@ -45,6 +48,24 @@ velero install \
 
 kubectl get pods -n velero
 ```
+
+### Paso 2.1 — Exponer MinIO para el cliente de Velero
+
+`s3Url` (arriba) solo es resoluble **dentro del cluster** (lo usa el servidor de Velero). Comandos ejecutados desde tu Mac, como `velero backup describe` y `velero backup logs`, generan una URL firmada y la resuelven con el DNS de tu máquina — por eso fallan con `dial tcp: lookup minio.velero.svc.cluster.local: no such host`.
+
+La solución de Velero es exponer MinIO con `port-forward` y configurar un `publicUrl` adicional, solo para el cliente:
+
+```bash
+# Dejar corriendo en una terminal aparte (o en background)
+kubectl port-forward -n velero svc/minio 9000:9000
+
+# En otra terminal: indicarle al CLI cómo llegar a MinIO desde fuera del cluster
+kubectl patch backupstoragelocation default -n velero \
+  --type merge \
+  -p '{"spec":{"config":{"publicUrl":"http://localhost:9000"}}}'
+```
+
+Con el `port-forward` activo, `velero backup describe`/`logs` ya pueden descargar los objetos.
 
 ### Paso 3 — Crear un backup
 
