@@ -120,14 +120,14 @@ kubectl delete pod pod-pending -n desarrollo
 kubectl apply -f escenario-service-roto.yaml
 
 # El pod está Running pero el Service no funciona
-kubectl get pods -n desarrollo -l app=servicio-roto
+kubectl get pods -n desarrollo -l app=servicio-roto-v2
 kubectl get service servicio-roto-svc -n desarrollo
 
 # Diagnóstico: el selector del Service no coincide con los labels del pod
 kubectl describe service servicio-roto-svc -n desarrollo
 # Buscar: "Endpoints: <none>"
 
-kubectl get pods -n desarrollo -l app=servicio-roto --show-labels
+kubectl get pods -n desarrollo -l app=servicio-roto-v2 --show-labels
 # El problema: el Service tiene selector "app: servicio-roto" 
 # pero el pod tiene label "app: servicio-roto-v2"
 
