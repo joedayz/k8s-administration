@@ -1,0 +1,11 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bloqueo-total
+  namespace: net-debug
+spec:
+  podSelector: {}       # aplica a TODOS los pods del namespace
+  policyTypes:
+  - Ingress
+  - Egress
+  # Sin reglas ingress ni egress = todo bloqueado

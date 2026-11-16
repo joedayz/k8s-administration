@@ -1,0 +1,103 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cluster-roto
+---
+# Problema 1: imagen incorrecta
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-imagen-mala
+  namespace: cluster-roto
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: app-imagen-mala
+  template:
+    metadata:
+      labels:
+        app: app-imagen-mala
+    spec:
+      containers:
+      - name: app
+        image: nginx:version-no-existe-2024
+        resources:
+          requests:
+            cpu: "20m"
+            memory: "32Mi"
+---
+# Problema 2: service con selector incorrecto
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-correcta
+  namespace: cluster-roto
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: app-correcta
+  template:
+    metadata:
+      labels:
+        app: app-correcta
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: "20m"
+            memory: "32Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-roto
+  namespace: cluster-roto
+spec:
+  selector:
+    app: app-equivocada   # BUG: selector incorrecto
+  ports:
+  - port: 80
+    targetPort: 80
+---
+# Problema 3: requests de recursos imposibles
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-recursos-altos
+  namespace: cluster-roto
+spec:
+  containers:
+  - name: app
+    image: nginx:alpine
+    resources:
+      requests:
+        cpu: "50"           # 50 cores — Pending para siempre
+        memory: "50Gi"
+---
+# Problema 4: liveness probe que falla
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-probe-falla
+  namespace: cluster-roto
+spec:
+  containers:
+  - name: app
+    image: nginx:alpine
+    resources:
+      requests:
+        cpu: "20m"
+        memory: "32Mi"
+    livenessProbe:
+      httpGet:
+        path: /ruta-que-no-existe-404
+        port: 80
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      failureThreshold: 2

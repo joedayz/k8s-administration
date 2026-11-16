@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-oom-corregido
+  namespace: troubleshooting
+  labels:
+    escenario: oom-fixed
+spec:
+  containers:
+  - name: memoria
+    image: polinux/stress
+    command: ["stress"]
+    args: ["--vm", "1", "--vm-bytes", "50M", "--vm-hang", "1"]
+    resources:
+      requests:
+        memory: "64Mi"
+      limits:
+        memory: "256Mi"   # límite mayor que el consumo: no habrá OOMKilled

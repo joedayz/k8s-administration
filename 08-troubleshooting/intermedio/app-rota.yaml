@@ -1,0 +1,80 @@
+# Deployment frontend — los pods tienen label app=frontend
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: net-debug
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: "20m"
+            memory: "32Mi"
+---
+# Service frontend ROTO — selector apunta a "frontend-v2" que no existe
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-frontend
+  namespace: net-debug
+spec:
+  selector:
+    app: frontend-v2        # BUG: debería ser "frontend"
+  ports:
+  - port: 80
+    targetPort: 80
+---
+# Deployment backend — escucha en puerto 8080
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: net-debug
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+      - name: http-echo
+        image: hashicorp/http-echo:latest
+        args:
+        - "-text=respuesta del backend"
+        - "-listen=:8080"
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            cpu: "20m"
+            memory: "32Mi"
+---
+# Service backend ROTO — targetPort incorrecto
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-backend
+  namespace: net-debug
+spec:
+  selector:
+    app: backend
+  ports:
+  - port: 80
+    targetPort: 80          # BUG: el contenedor escucha en 8080, no en 80
