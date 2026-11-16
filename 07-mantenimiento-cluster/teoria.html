@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Módulo 07 — Mantenimiento del Cluster</title>
+<link rel="stylesheet" href="../assets/theory.css">
+</head>
+<body style="--accent:#0891b2; --accent-dark:#155e75;">
+<div class="container">
+
+  <header class="module-header">
+    <span class="badge">Módulo 07 · 4h</span>
+    <h1>Mantenimiento del Cluster</h1>
+    <p class="subtitle">Cordon/drain, backup y restore, upgrade del cluster y gestión de certificados.</p>
+  </header>
+
+  <section>
+    <h2>👤 Rol del administrador</h2>
+    <div class="role-box">
+      <p>El mantenimiento del cluster es responsabilidad exclusiva del admin. Un fallo en este proceso puede dejar el cluster sin servicio:</p>
+      <ul>
+        <li>Actualizar el cluster sin interrumpir los workloads (rolling upgrade)</li>
+        <li>Hacer y restaurar backups del estado del cluster (etcd/SQLite)</li>
+        <li>Gestionar el ciclo de vida de los nodos: cordon, drain, uncordon</li>
+        <li>Administrar certificados TLS del cluster (caducan cada año)</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>📘 Teoría</h2>
+
+    <div class="card">
+      <h3>Flujo de mantenimiento de un nodo</h3>
+      <pre class="diagram">1. kubectl cordon <nodo>    → SchedulingDisabled: no entran pods nuevos
+2. kubectl drain <nodo>     → Pods existentes migran a otros nodos
+3. [mantenimiento: OS upgrade, parche, reinicio...]
+4. kubectl uncordon <nodo>  → El nodo vuelve a aceptar pods</pre>
+    </div>
+
+    <div class="card">
+      <h3>Backup del estado del cluster</h3>
+      <p>El estado de Kubernetes se almacena en etcd (kubeadm) o SQLite/kine (k3s).</p>
+      <table>
+        <thead><tr><th>Cluster</th><th>Backend</th><th>Comando backup</th></tr></thead>
+        <tbody>
+          <tr><td>kubeadm</td><td>etcd</td><td><code>etcdctl snapshot save backup.db</code></td></tr>
+          <tr><td>k3s</td><td>SQLite (kine)</td><td><code>cp /var/lib/rancher/k3s/server/db/state.db backup.db</code></td></tr>
+          <tr><td>k3s cluster-init</td><td>etcd embebido</td><td><code>k3s etcd-snapshot save</code></td></tr>
+        </tbody>
+      </table>
+      <div class="note"><strong>Regla de oro:</strong> un backup de etcd es un backup de TODO el cluster (Pods, Deployments, Secrets, RBAC...). Sin él, un fallo del control plane es irrecuperable.</div>
+    </div>
+
+    <div class="card">
+      <h3>Upgrade del cluster (kubeadm)</h3>
+      <p>El proceso de upgrade en un cluster kubeadm tiene un orden estricto:</p>
+      <pre class="diagram">1. Primero el CONTROL PLANE  (kubeadm upgrade apply)
+2. Luego cada WORKER uno a uno (drain → upgrade → uncordon)</pre>
+      <p>En k3s, el upgrade se realiza reinstalando k3s con el script oficial apuntando a la nueva versión.</p>
+    </div>
+
+    <div class="card">
+      <h3>Gestión de certificados</h3>
+      <p>Los certificados del cluster caducan cada <strong>365 días</strong> en kubeadm. Síntomas de un certificado caducado:</p>
+      <ul>
+        <li><code>kubectl</code> devuelve <code>x509: certificate has expired</code></li>
+        <li>Los componentes del control plane no arrancan</li>
+      </ul>
+      <pre class="diagram"># Ver cuándo caducan los certificados (kubeadm)
+kubeadm certs check-expiration
+
+# Renovar todos los certificados
+kubeadm certs renew all</pre>
+    </div>
+
+  </section>
+
+  <section>
+    <h2>🧪 Laboratorios</h2>
+    <div class="lab-grid">
+      <a class="lab-card basico" href="basico/README.md">Lab Básico<small>Cordon, drain y uncordon de nodos</small></a>
+      <a class="lab-card intermedio" href="intermedio/README.md">Lab Intermedio<small>Backup y restore del cluster</small></a>
+      <a class="lab-card avanzado" href="avanzado/README.md">Lab Avanzado<small>Upgrade del cluster y certificados</small></a>
+    </div>
+  </section>
+
+  <footer>
+    <p><a href="../index.html">← Volver al índice</a></p>
+  </footer>
+
+</div>
+</body>
+</html>
