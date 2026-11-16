@@ -79,18 +79,56 @@ kubectl get pdb -n produccion
 kubectl describe pdb app-escalable-pdb -n produccion
 ```
 
-**Probar el PDB durante un drain:**
+**Probar el PDB durante un drain.** Sigue una sola de las dos secciones, según tu clúster. En ambos casos el drain es real, sin `--dry-run`: el dry-run no llama a la API de eviction, el PDB no interviene y el nodo tampoco queda cordoned. `--pod-selector` limita el desalojo a esta app. `produccion` es un namespace compartido con otros labs, y en el nodo único evita llevarse CoreDNS, Traefik y el resto del sistema.
+
+### Si tienes un solo nodo
+
+El único nodo es `k3s-server`. Las 3 réplicas viven ahí y no hay otro sitio donde reprogramarlas. El drain desaloja hasta dejar 1 pod Ready (`minAvailable: 1`) y el PDB bloquea el último. Los desalojados quedan `Pending` hasta el `uncordon`.
 
 ```bash
-# Escalar a 3 réplicas para tener margen
 kubectl scale deployment app-escalable --replicas=3 -n produccion
+kubectl get pods -n produccion -l app=app-escalable -o wide
 
-# Intentar drenar el nodo (el PDB debe limitar la operación)
-# En single-node esto es más visual, en multi-node se ve cómo respeta el mínimo
-kubectl drain k3s-server --ignore-daemonsets --delete-emptydir-data --dry-run
+kubectl drain k3s-server --ignore-daemonsets --delete-emptydir-data \
+  --pod-selector=app=app-escalable
 
-# Restaurar el nodo
+# Esperado: se desalojan 2 pods y el tercero se queda.
+# cannot evict pod ... as it would violate the pod's disruption budget
+kubectl get pods -n produccion -l app=app-escalable -o wide
+
 kubectl uncordon k3s-server
+```
+
+### Si tienes varios nodos
+
+En este lab son `k3s-server`, `k3s-worker` y `k3s-worker2`. Drena el worker que salga en la columna `NODE`, no `k3s-server`: es el control plane. Con 3 réplicas y `minAvailable: 1` el drain termina bien. El PDB deja pasar la disrupción porque sigue habiendo al menos 1 pod Ready, y el desalojado se reprograma en otro nodo.
+
+```bash
+kubectl scale deployment app-escalable --replicas=3 -n produccion
+kubectl get pods -n produccion -l app=app-escalable -o wide
+
+# Sustituye k3s-worker por el nodo que salió en NODE (k3s-worker o k3s-worker2)
+kubectl drain k3s-worker --ignore-daemonsets --delete-emptydir-data \
+  --pod-selector=app=app-escalable
+
+kubectl get pods -n produccion -l app=app-escalable -o wide
+
+# drain deja el nodo en SchedulingDisabled
+kubectl uncordon k3s-worker
+```
+
+El rechazo aparece cuando evictar el siguiente pod dejaría menos de `minAvailable` pods Ready. Para verlo, deja una sola réplica y drena el nodo donde está:
+
+```bash
+kubectl scale deployment app-escalable --replicas=1 -n produccion
+kubectl get pods -n produccion -l app=app-escalable -o wide
+
+# cannot evict pod ... as it would violate the pod's disruption budget
+kubectl drain k3s-worker --ignore-daemonsets --delete-emptydir-data \
+  --pod-selector=app=app-escalable
+
+kubectl uncordon k3s-worker
+kubectl scale deployment app-escalable --replicas=3 -n produccion
 ```
 
 ---
