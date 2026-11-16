@@ -35,7 +35,7 @@ Este clúster tiene un solo server. k3s guarda el API en SQLite, a través de ki
 /var/lib/rancher/k3s/server/db/state.db
 ```
 
-Ahí están los Pods, Deployments, Secrets, RBAC y el resto de objetos. Para una copia consistente hay que parar `k3s`: al salir, vuelca el journal (`state.db-wal`) dentro de `state.db`.
+Ahí están los Pods, Deployments, Secrets, RBAC y el resto de objetos. Para una copia consistente hay que parar `k3s` y volcar el journal (`state.db-wal`) con `PRAGMA wal_checkpoint(TRUNCATE)` antes de copiar `state.db`. `systemctl stop` no siempre hace ese vuelco: la copia se queda sin los objetos nuevos y un restore posterior los borra.
 
 ```bash
 sudo systemctl stop k3s

@@ -46,7 +46,7 @@
       <pre class="diagram">sudo systemctl stop k3s
 sudo cp /var/lib/rancher/k3s/server/db/state.db /root/k3s-backup.db
 sudo systemctl start k3s</pre>
-      <div class="note"><strong>Regla de oro:</strong> esa copia es el backup de todos los objetos del API. Sin ella, un fallo del server es irrecuperable. Quedan fuera las imágenes, los volúmenes del nodo y los certificados de <code>/var/lib/rancher/k3s/server/tls/</code>. Al restaurar, borra <code>state.db-wal</code> y <code>state.db-shm</code> antes de arrancar: si los dejas, SQLite reaplica el journal posterior al backup.</div>
+      <div class="note"><strong>Regla de oro:</strong> esa copia es el backup de todos los objetos del API. Sin ella, un fallo del server es irrecuperable. Quedan fuera las imágenes, los volúmenes del nodo y los certificados de <code>/var/lib/rancher/k3s/server/tls/</code>. Antes de copiar, vuelca el journal con <code>PRAGMA wal_checkpoint(TRUNCATE)</code>: <code>systemctl stop</code> no siempre lo hace y la copia se queda sin los objetos nuevos. Al restaurar, borra <code>state.db</code>, <code>state.db-wal</code> y <code>state.db-shm</code> y copia el backup con un nombre nuevo.</div>
       <p><strong>kubeadm.</strong> El estado vive en etcd. En un control plane:</p>
       <pre class="diagram">sudo ETCDCTL_API=3 etcdctl \
   --endpoints=https://127.0.0.1:2379 \

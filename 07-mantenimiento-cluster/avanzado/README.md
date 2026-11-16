@@ -23,8 +23,9 @@ multipass exec k3s-server -- k3s --version
 Antes de actualizar, siempre:
 
 ```bash
-# 1. Backup de state.db. Al parar k3s, el WAL se vuelca en el archivo.
+# 1. Backup de state.db. stop no siempre vuelca el WAL: hay que hacer checkpoint.
 multipass exec k3s-server -- sudo systemctl stop k3s
+multipass exec k3s-server -- sudo python3 -c 'import sqlite3; c=sqlite3.connect("/var/lib/rancher/k3s/server/db/state.db"); c.execute("PRAGMA wal_checkpoint(TRUNCATE)"); c.commit(); c.close()'
 multipass exec k3s-server -- sudo cp \
   /var/lib/rancher/k3s/server/db/state.db \
   /root/k3s-pre-upgrade-backup.db

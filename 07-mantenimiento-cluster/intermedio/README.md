@@ -42,15 +42,34 @@ kubectl get configmap datos-importantes -n backup-test -o yaml
 
 ### Paso 3 — Backup de la base de datos SQLite
 
+`systemctl stop` no siempre vuelca `state.db-wal` dentro de `state.db`. Si copias solo el archivo, el backup puede no tener los objetos que acabas de crear y el restore posterior los borra. El checkpoint mete el journal en `state.db` antes de copiar. La comprobación tiene que imprimir `ultima revision deleted: 0`. Si imprime `None` o `1`, no sigas: esa copia no sirve.
+
 ```bash
-# Parar k3s para que vuelque state.db-wal dentro de state.db
 multipass exec k3s-server -- sudo systemctl stop k3s
+
+multipass exec k3s-server -- sudo python3 - <<'PY'
+import sqlite3
+con = sqlite3.connect("/var/lib/rancher/k3s/server/db/state.db")
+con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+con.commit()
+con.close()
+print("checkpoint ok")
+PY
 
 multipass exec k3s-server -- sudo cp \
   /var/lib/rancher/k3s/server/db/state.db \
   /root/k3s-backup.db
 
-multipass exec k3s-server -- sudo ls -lh /root/k3s-backup.db
+multipass exec k3s-server -- sudo python3 - <<'PY'
+import sqlite3
+con = sqlite3.connect("file:/root/k3s-backup.db?mode=ro", uri=True)
+row = con.execute(
+    "select deleted from kine where name='/registry/namespaces/backup-test' order by id desc limit 1"
+).fetchone()
+print("ultima revision deleted:", None if row is None else row[0])
+if row is None or row[0] != 0:
+    raise SystemExit("el backup no contiene backup-test")
+PY
 
 multipass exec k3s-server -- sudo systemctl start k3s
 sleep 15
@@ -72,14 +91,16 @@ kubectl get namespace backup-test
 
 ### Paso 5 — Restaurar desde backup
 
-Hay que quitar el journal posterior al backup. Si dejas `state.db-wal` y `state.db-shm`, SQLite los reaplica al arrancar y el namespace sigue borrado.
+Hay que borrar el archivo y su journal, y poner el backup en un archivo nuevo. Si solo pisas `state.db` y dejas `state.db-wal`, SQLite reaplica el journal de después del backup y el namespace sigue borrado.
 
 ```bash
 multipass exec k3s-server -- sudo systemctl stop k3s
 
 multipass exec k3s-server -- sudo bash -c '
+  set -e
   cp /var/lib/rancher/k3s/server/db/state.db /root/state.db.pre-restore
-  rm -f /var/lib/rancher/k3s/server/db/state.db-wal \
+  rm -f /var/lib/rancher/k3s/server/db/state.db \
+        /var/lib/rancher/k3s/server/db/state.db-wal \
         /var/lib/rancher/k3s/server/db/state.db-shm
   cp /root/k3s-backup.db /var/lib/rancher/k3s/server/db/state.db
 '
