@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-critico-urgente
+  namespace: scheduling
+  labels:
+    app: api-urgente
+spec:
+  # Misma clase que api-critica (value 1000000), por encima de batch-jobs (100).
+  # El request no cabe si el nodo está lleno de batch: el scheduler los expulsa.
+  priorityClassName: critico
+  containers:
+  - name: api
+    image: nginx:alpine
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "512Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
