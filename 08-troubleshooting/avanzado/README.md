@@ -10,9 +10,18 @@ Diagnosticar y recuperar un worker con `k3s-agent` parado, un disco lleno y un C
 
 ## Escenario 1 — Nodo NotReady: k3s-agent parado
 
-En este clúster el worker no corre la unidad `kubelet`. El proceso que registra el nodo es `k3s-agent`. En el server la unidad es `k3s`.
+En este clúster el worker no corre la unidad `kubelet`. El proceso que registra el nodo es `k3s-agent`. En el server la unidad es `k3s`. En un worker, `k3s.service` tiene que estar deshabilitada: si arranca, ocupa `127.0.0.1:6444` y el agente ya no puede levantarse.
+
+```bash
+# disabled / inactive. Si sale enabled, deshabilítala antes del ejercicio:
+# multipass exec k3s-worker -- sudo systemctl disable --now k3s
+multipass exec k3s-worker -- sudo systemctl is-enabled k3s
+multipass exec k3s-worker -- sudo systemctl is-active k3s
+```
 
 ### Simular el fallo
+
+`systemctl stop` solo señala al proceso principal (`KillMode=process`). El balanceador local puede seguir escuchando en `127.0.0.1:6444`. Eso no impide ver el nodo `NotReady`; sí impide el `start` de después. No lances `systemctl start k3s` para “arreglarlo”.
 
 ```bash
 multipass exec k3s-worker -- sudo systemctl stop k3s-agent
@@ -40,14 +49,22 @@ multipass exec k3s-worker -- sudo journalctl -u k3s-agent -n 30 --no-pager
 
 ### Resolver
 
+`k3s-killall.sh` mata el proceso que se quedó en el puerto 6444 y los `containerd-shim` del worker. Luego el agente arranca limpio. Los pods que estaban en ese nodo se recrean en otro.
+
 ```bash
-# Reiniciar el agente k3s en el worker
+multipass exec k3s-worker -- sudo /usr/local/bin/k3s-killall.sh
 multipass exec k3s-worker -- sudo systemctl start k3s-agent
 
-# Esperar recuperación (~20 segundos)
 sleep 25
 kubectl get nodes
 # k3s-worker debe volver a Ready
+```
+
+Si `start` responde `address already in use`, el puerto sigue ocupado. Comprueba que no haya un server en el worker y repite el `k3s-killall.sh`:
+
+```bash
+multipass exec k3s-worker -- sudo ss -ltnp | grep 6444
+# Tiene que decir k3s-agent, no k3s-server
 ```
 
 ---
@@ -207,6 +224,7 @@ kubectl get endpoints -A | grep "<none>"
 Estos escenarios tocan el nodo y CoreDNS, no solo un namespace. Hay que devolverlos aunque el ejercicio se haya quedado a medias.
 
 ```bash
+multipass exec k3s-worker -- sudo /usr/local/bin/k3s-killall.sh
 multipass exec k3s-worker -- sudo systemctl start k3s-agent
 multipass exec k3s-worker -- sudo rm -f /tmp/disco-lleno
 kubectl scale deployment coredns --replicas=1 -n kube-system
