@@ -1,0 +1,39 @@
+# Referencia: kubeadm-config.yaml para clusters HA (kubeadm)
+# Este archivo NO se aplica en k3s — es referencia para el examen CKA
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: InitConfiguration
+metadata:
+  name: config
+bootstrapTokens:
+- groups:
+  - system:bootstrappers:kubeadm:default-node-token
+  token: "abcdef.0123456789abcdef"
+  ttl: "24h"
+nodeRegistration:
+  criSocket: "unix:///var/run/containerd/containerd.sock"
+  kubeletExtraArgs:
+    node-ip: "192.168.1.10"
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+metadata:
+  name: config
+kubernetesVersion: "v1.31.0"
+controlPlaneEndpoint: "192.168.1.100:6443"   # IP del load balancer
+apiServer:
+  certSANs:
+  - "192.168.1.100"
+  - "k8s-api.midominio.com"
+networking:
+  podSubnet: "10.244.0.0/16"
+  serviceSubnet: "10.96.0.0/12"
+etcd:
+  local:
+    dataDir: "/var/lib/etcd"
+    # Para external etcd:
+    # external:
+    #   endpoints:
+    #   - "https://192.168.1.20:2379"
+    #   caFile: "/etc/kubernetes/pki/etcd/ca.crt"
+    #   certFile: "/etc/kubernetes/pki/etcd/apiserver-etcd-client.crt"
+    #   keyFile: "/etc/kubernetes/pki/etcd/apiserver-etcd-client.key"

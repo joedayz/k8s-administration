@@ -73,21 +73,24 @@ multipass exec k3s-worker -- sudo ss -ltnp | grep 6444
 
 ### Simular
 
+Estas VMs tienen un disco de 20 GB. Con k3s instalado y sin el archivo de relleno quedan unos 8 GB libres. En k3s el umbral duro de `nodefs.available` es **5 %** (~1 GB libre en un disco de 20 GB), no el 10 % de Kubernetes vanilla. Un solo archivo de **7.5 GB** deja cerca de 0.5 GB libres. Además k3s usa `evictionPressureTransitionPeriod: 5m`: la condición puede tardar hasta 5 minutos en pasar a `True`. Borra un relleno anterior antes, para no sumar encima de una prueba a medias.
+
 ```bash
-# 3 GB. Si DiskPressure sigue en False, el disco aún no cruzó el umbral
-# de desalojo (suele ser ~85% de nodefs). df -h dice cuánto falta.
-multipass exec k3s-worker -- bash -c "df -h / && dd if=/dev/zero of=/tmp/disco-lleno bs=1M count=3000 2>&1 | tail -1 && df -h /"
+multipass exec k3s-worker -- sudo rm -f /tmp/disco-lleno
+multipass exec k3s-worker -- bash -c 'df -h / && dd if=/dev/zero of=/tmp/disco-lleno bs=1M count=7500 status=progress && df -h /'
+# df debe mostrar ~0.5G Avail (~97% Use)
 ```
 
 ### Diagnosticar
 
 ```bash
-kubectl describe node k3s-worker
-# Buscar: DiskPressure=True en Conditions
+# El heartbeat del nodo tarda; espera el periodo de 5 minutos si hace falta
+watch -n 10 'kubectl describe node k3s-worker | sed -n "/Conditions:/,/Addresses:/p"'
+# Buscar: DiskPressure=True
 
 # En el nodo:
-multipass exec k3s-worker -- df -h
-multipass exec k3s-worker -- du -sh /tmp/* 2>/dev/null | sort -h | tail -5
+multipass exec k3s-worker -- df -h /
+multipass exec k3s-worker -- du -sh /tmp/disco-lleno
 ```
 
 ### Resolver
