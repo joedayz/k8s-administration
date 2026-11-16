@@ -46,21 +46,40 @@ kubectl exec -n produccion pod-configurado -- env | grep -E "DB_|APP_"
 # Verificar que el archivo de config fue montado
 kubectl exec -n produccion pod-configurado -- cat /etc/config/app.properties
 
-# Limpiar
-kubectl delete pod pod-configurado -n produccion
+
 ```
 
 ### Paso 4 — Actualizar un ConfigMap y recargar la configuración
 
+El pod del paso 3 debe seguir vivo para poder comparar. Se actualizan
+la variable de entorno y también la clave `app.properties`, porque el
+archivo montado en `/etc/config` viene de esa clave: si solo se
+parchea `APP_LOG_LEVEL`, el archivo no cambia.
+
 ```bash
-# Actualizar el ConfigMap
 kubectl patch configmap app-config -n produccion \
   --type merge \
-  -p '{"data":{"APP_LOG_LEVEL":"DEBUG"}}'
+  -p '{"data":{"APP_LOG_LEVEL":"DEBUG","app.properties":"environment=produccion\nlog.level=DEBUG\nserver.port=8080\ndb.host=postgres-0.postgres-headless.produccion.svc.cluster.local\ndb.port=5432\ndb.name=appdb\ncache.ttl=300\nfeature.nueva-ui=false"}}'
 
-# Los archivos montados se actualizan automáticamente (en ~60s)
-# Las variables de entorno NO se actualizan — requieren reinicio del pod
+# El objeto ConfigMap se actualiza al instante
+kubectl get configmap app-config -n produccion -o jsonpath='{.data.APP_LOG_LEVEL}'; echo
+
+# Esperar ~60s (ciclo de sincronización del kubelet) y comparar las dos vías
+kubectl exec -n produccion pod-configurado -- env | grep APP_LOG_LEVEL
+kubectl exec -n produccion pod-configurado -- cat /etc/config/app.properties | grep log.level
 ```
+
+Resultado esperado: `env` sigue mostrando `APP_LOG_LEVEL=INFO` (las
+variables de entorno se inyectan al crear el contenedor y no se
+actualizan en caliente; requiere recrear el pod), mientras que el
+archivo montado pasa a `log.level=DEBUG` (el kubelet refresca los
+volúmenes montados en caliente).
+
+```bash
+# Limpiar
+kubectl delete pod pod-configurado -n produccion
+```
+
 
 ---
 
