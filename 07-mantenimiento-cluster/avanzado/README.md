@@ -1,7 +1,7 @@
 # Lab 07 — Avanzado: Upgrade del Cluster y Gestión de Certificados
 
 ## Objetivo
-Actualizar el cluster de Kubernetes sin interrumpir los workloads, e inspeccionar y gestionar los certificados TLS que mantienen seguro el cluster.
+Actualizar este clúster k3s sin interrumpir los workloads, e inspeccionar y gestionar los certificados TLS del server.
 
 ## Duración estimada
 75 minutos
@@ -13,9 +13,9 @@ Actualizar el cluster de Kubernetes sin interrumpir los workloads, e inspecciona
 ### Paso 1 — Verificar la versión actual
 
 ```bash
-kubectl version
 kubectl get nodes -o wide
-# Anotar la versión actual: v1.37.x+k3s1
+multipass exec k3s-server -- k3s --version
+# Este clúster está en v1.37.2+k3s1
 ```
 
 ### Paso 2 — Preparar el upgrade (plan de riesgo)
@@ -23,11 +23,11 @@ kubectl get nodes -o wide
 Antes de actualizar, siempre:
 
 ```bash
-# 1. Hacer un backup del estado
+# 1. Backup de state.db. Al parar k3s, el WAL se vuelca en el archivo.
 multipass exec k3s-server -- sudo systemctl stop k3s
 multipass exec k3s-server -- sudo cp \
   /var/lib/rancher/k3s/server/db/state.db \
-  /tmp/k3s-pre-upgrade-backup.db
+  /root/k3s-pre-upgrade-backup.db
 multipass exec k3s-server -- sudo systemctl start k3s
 sleep 15
 
@@ -36,49 +36,41 @@ kubectl get nodes
 kubectl get pods -A | grep -v Running | grep -v Completed | grep -v NAME
 ```
 
-### Paso 3 — Upgrade del control plane (server)
+### Paso 3 — Upgrade del server
 
-En k3s, el upgrade se hace reinstalando con la nueva versión:
+k3s se actualiza volviendo a ejecutar el script de instalación. El servicio del server se llama `k3s`. Va primero: un worker no puede quedar en una versión más nueva que el server.
+
+`v1.37.2+k3s1` es la versión que ya tiene este clúster. Con ese valor el script reinstala y reinicia, y la release no cambia. Para subir de parche, sustituye `INSTALL_K3S_VERSION` por la release publicada en [github.com/k3s-io/k3s/releases](https://github.com/k3s-io/k3s/releases).
 
 ```bash
-# En el nodo server
 multipass exec k3s-server -- sudo bash -c \
   'curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.37.2+k3s1 sh -'
 
-# Verificar que el server está en la nueva versión
 sleep 20
 kubectl get nodes
-multipass exec k3s-server -- sudo k3s --version
+multipass exec k3s-server -- k3s --version
 ```
 
 ### Paso 4 — Upgrade de los workers (uno a uno)
 
+En los workers el servicio es `k3s-agent`. El unit ya guarda `K3S_URL` y `K3S_TOKEN` en `/etc/systemd/system/k3s-agent.service.env`, así que el script solo cambia el binario. `drain` mueve todos los pods de ese nodo, también los de otros labs. kube-proxy y el CNI van dentro del proceso k3s, no son pods.
+
 ```bash
-# Worker 1 — cordon primero
 kubectl cordon k3s-worker
 kubectl drain k3s-worker --ignore-daemonsets --delete-emptydir-data --grace-period=30
 
-# Upgrade del worker
-K3S_TOKEN=$(multipass exec k3s-server -- sudo cat /var/lib/rancher/k3s/server/node-token)
-SERVER_IP="192.168.252.2"
-
 multipass exec k3s-worker -- sudo bash -c \
-  "curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.37.2+k3s1 \
-   K3S_URL=https://${SERVER_IP}:6443 \
-   K3S_TOKEN=${K3S_TOKEN} sh -"
+  'curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.37.2+k3s1 sh -'
 
 sleep 20
 kubectl uncordon k3s-worker
 kubectl get nodes
 
-# Repetir para k3s-worker2
 kubectl cordon k3s-worker2
 kubectl drain k3s-worker2 --ignore-daemonsets --delete-emptydir-data --grace-period=30
 
 multipass exec k3s-worker2 -- sudo bash -c \
-  "curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.37.2+k3s1 \
-   K3S_URL=https://${SERVER_IP}:6443 \
-   K3S_TOKEN=${K3S_TOKEN} sh -"
+  'curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.37.2+k3s1 sh -'
 
 sleep 20
 kubectl uncordon k3s-worker2
@@ -110,26 +102,23 @@ multipass exec k3s-server -- sudo openssl x509 \
   -noout -issuer -subject
 ```
 
-### Paso 6 — Workflow CKA: certificados en kubeadm
+### Paso 6 — Ver caducidad y renovar (k3s)
 
-Este es el procedimiento del examen CKA. Muestra conceptualmente lo que harías en un cluster kubeadm:
+Los certificados los administra k3s en `k3s-server`. Los de cliente y serving duran 365 días; las CA, 10 años. Si al arrancar k3s a un certificado le quedan menos de 90 días, lo renueva solo.
 
 ```bash
-# Ver expiración de todos los certificados (kubeadm)
-kubeadm certs check-expiration
+multipass exec k3s-server -- sudo k3s certificate check --output table
+```
 
-# Resultado típico:
-# CERTIFICATE                EXPIRES                  RESIDUAL TIME
-# admin.conf                 Nov 09, 2027 20:23 UTC   364d
-# apiserver                  Nov 09, 2027 20:23 UTC   364d
-# apiserver-etcd-client      Nov 09, 2027 20:23 UTC   364d
-# etcd-ca                    Nov 07, 2036 20:23 UTC   10y
+La columna `STATUS` sale `OK`. `client-admin.crt` es el certificado con el que entra `kubectl`. `serving-kube-apiserver.crt` es el del API server.
 
-# Renovar TODOS los certificados (hacerlo 30 días antes de que caduquen)
-kubeadm certs renew all
+`k3s certificate rotate` reescribe los certificados en disco. En este lab no hace falta ejecutarlo: el `check` ya los muestra vigentes. Si hubiera que renovarlos:
 
-# Después de renovar, reiniciar los componentes del control plane
-# (en un cluster kubeadm se reinician los static pods automáticamente)
+```bash
+multipass exec k3s-server -- sudo k3s certificate rotate
+multipass exec k3s-server -- sudo systemctl restart k3s
+
+# k3s reescribe /etc/rancher/k3s/k3s.yaml con el client-admin nuevo
 ```
 
 ### Paso 7 — Ver el kubeconfig y sus certificados
@@ -166,27 +155,62 @@ rm /tmp/k3s-emergency.yaml
 ## Limpieza
 
 ```bash
-multipass exec k3s-server -- sudo rm -f /tmp/k3s-pre-upgrade-backup.db
+multipass exec k3s-server -- sudo rm -f /root/k3s-pre-upgrade-backup.db
 ```
 
 ---
 
-## Referencia: orden de upgrade en kubeadm (examen CKA)
+## Para llevar a un clúster real
 
+Estos comandos no se ejecutan en las VMs del curso. El orden se mantiene: primero el control plane, después los workers, y un worker no puede quedar más nuevo que el API.
+
+**kubeadm.** En el primer control plane, `upgrade apply`. En los otros control planes, `upgrade node`. La cadena `<version>` sale de `apt-cache madison kubeadm`. En RHEL el paquete se instala con `dnf`.
+
+```bash
+sudo kubeadm upgrade plan
+sudo apt-get install -y kubeadm=<version>
+sudo kubeadm upgrade apply vX.Y.Z
+sudo apt-get install -y kubelet=<version> kubectl=<version>
+sudo systemctl daemon-reload
+sudo systemctl restart kubelet
+
+# Cada worker: drain, los mismos paquetes de kubelet y kubectl, restart, uncordon
 ```
-1. kubeadm upgrade plan                    → ver versiones disponibles
-2. apt update && apt install kubeadm=X.Y.Z → actualizar kubeadm
-3. kubeadm upgrade apply vX.Y.Z            → upgrade del control plane
-4. apt install kubelet=X.Y.Z kubectl=X.Y.Z → actualizar kubelet y kubectl
-5. systemctl restart kubelet
-6. [Por cada worker]: drain → apt install kubelet → systemctl restart → uncordon
+
+Los certificados de cliente y serving duran 365 días. `renew all` actualiza `/etc/kubernetes/pki` y `/etc/kubernetes/admin.conf`. Las CA siguen igual. Los static pods leen el certificado al arrancar:
+
+```bash
+sudo kubeadm certs check-expiration
+sudo kubeadm certs renew all
+
+sudo mkdir -p /tmp/k8s-manifests
+sudo mv /etc/kubernetes/manifests/*.yaml /tmp/k8s-manifests/
+sleep 20
+sudo mv /tmp/k8s-manifests/*.yaml /etc/kubernetes/manifests/
 ```
+
+**OpenShift.** El canal y la versión destino los aplica el Cluster Version Operator. El Machine Config Pool drena los nodos. Las hojas de certificado las rota la plataforma. `oc get csr` es la cola de los nodos. Forzar una hoja, y esperar a los operadores:
+
+```bash
+oc get clusterversion
+oc adm upgrade
+oc adm upgrade channel stable-4.21
+oc adm upgrade --to=4.21.2
+oc get mcp
+
+oc get csr
+oc adm ocp-certificates regenerate-leaf \
+  -n openshift-kube-apiserver secrets localhost-serving-cert-certkey
+oc adm wait-for-stable-cluster
+```
+
+En EKS, GKE o AKS el control plane y sus certificados los renueva el proveedor. El admin actualiza el node group y drena los workers.
 
 ---
 
 ## Preguntas de reflexión para el instructor
 
-1. ¿Por qué hay que actualizar el control plane ANTES que los workers?
+1. ¿Por qué hay que actualizar `k3s-server` antes que los workers?
 2. ¿Qué ocurre si un certificado del apiserver caduca en producción a las 3 AM?
 3. ¿Cuánto tiempo tienes para actualizar antes de que tu versión quede fuera de soporte?
 4. ¿Qué es la política de N-2 de Kubernetes y qué implica para los upgrades?

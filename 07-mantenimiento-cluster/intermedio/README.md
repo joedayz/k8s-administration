@@ -8,11 +8,11 @@ Hacer un backup completo del estado del cluster, simular pérdida de datos y res
 
 ---
 
-## Contexto: k3s usa SQLite (kine), no etcd
+## Dónde está el estado
 
-En este lab usamos k3s, que por defecto usa SQLite como backend en lugar de etcd. El proceso de backup es equivalente en concepto — estamos guardando todo el estado del cluster.
+Este clúster tiene un solo server. k3s guarda el API en SQLite, a través de kine, en `/var/lib/rancher/k3s/server/db/state.db`. Ahí están los Pods, Deployments, Secrets, RBAC y el resto de objetos.
 
-> En un cluster kubeadm de producción, el comando sería `etcdctl snapshot save`. La sección final del lab muestra ese workflow para el examen CKA.
+Mientras `k3s` está parado, `kubectl` desde el Mac no responde. Los workers siguen encendidos y se reconectan al volver el server.
 
 ---
 
@@ -43,22 +43,18 @@ kubectl get configmap datos-importantes -n backup-test -o yaml
 ### Paso 3 — Backup de la base de datos SQLite
 
 ```bash
-# Parar k3s brevemente para un backup consistente
+# Parar k3s para que vuelque state.db-wal dentro de state.db
 multipass exec k3s-server -- sudo systemctl stop k3s
 
-# Hacer el backup
 multipass exec k3s-server -- sudo cp \
   /var/lib/rancher/k3s/server/db/state.db \
-  /tmp/k3s-backup-$(date +%Y%m%d-%H%M).db
+  /root/k3s-backup.db
 
-# Verificar el backup
-multipass exec k3s-server -- sudo ls -lh /tmp/k3s-backup-*.db
+multipass exec k3s-server -- sudo ls -lh /root/k3s-backup.db
 
-# Reiniciar k3s
 multipass exec k3s-server -- sudo systemctl start k3s
 sleep 15
 
-# Verificar que el cluster volvió
 kubectl get nodes
 ```
 
@@ -76,58 +72,24 @@ kubectl get namespace backup-test
 
 ### Paso 5 — Restaurar desde backup
 
+Hay que quitar el journal posterior al backup. Si dejas `state.db-wal` y `state.db-shm`, SQLite los reaplica al arrancar y el namespace sigue borrado.
+
 ```bash
-# Parar k3s
 multipass exec k3s-server -- sudo systemctl stop k3s
 
-# Restaurar la base de datos desde el backup
-multipass exec k3s-server -- sudo bash -c \
-  "cp /var/lib/rancher/k3s/server/db/state.db /tmp/state.db.pre-restore && \
-   cp /tmp/k3s-backup-*.db /var/lib/rancher/k3s/server/db/state.db"
+multipass exec k3s-server -- sudo bash -c '
+  cp /var/lib/rancher/k3s/server/db/state.db /root/state.db.pre-restore
+  rm -f /var/lib/rancher/k3s/server/db/state.db-wal \
+        /var/lib/rancher/k3s/server/db/state.db-shm
+  cp /root/k3s-backup.db /var/lib/rancher/k3s/server/db/state.db
+'
 
-# Reiniciar k3s
 multipass exec k3s-server -- sudo systemctl start k3s
 sleep 20
 
-# Verificar que los datos volvieron
 kubectl get namespace backup-test
 kubectl get all -n backup-test
 kubectl get configmap datos-importantes -n backup-test -o yaml
-```
-
----
-
-## Parte C — Workflow etcd para el examen CKA
-
-Este es el procedimiento que se pide en el examen CKA con `etcdctl`:
-
-```bash
-# En un cluster kubeadm, el etcd corre como pod en kube-system
-kubectl get pod -n kube-system | grep etcd
-
-# Variables del entorno etcd
-ETCD_ENDPOINTS="https://127.0.0.1:2379"
-ETCD_CACERT="/etc/kubernetes/pki/etcd/ca.crt"
-ETCD_CERT="/etc/kubernetes/pki/etcd/server.crt"
-ETCD_KEY="/etc/kubernetes/pki/etcd/server.key"
-
-# BACKUP
-ETCDCTL_API=3 etcdctl \
-  --endpoints=$ETCD_ENDPOINTS \
-  --cacert=$ETCD_CACERT \
-  --cert=$ETCD_CERT \
-  --key=$ETCD_KEY \
-  snapshot save /opt/etcd-backup.db
-
-# Verificar el snapshot
-ETCDCTL_API=3 etcdctl snapshot status /opt/etcd-backup.db --write-out=table
-
-# RESTORE (en caso de desastre)
-ETCDCTL_API=3 etcdctl snapshot restore /opt/etcd-backup.db \
-  --data-dir=/var/lib/etcd-restored
-
-# Actualizar el static pod de etcd para apuntar al nuevo directorio
-# (editar /etc/kubernetes/manifests/etcd.yaml y cambiar el hostPath)
 ```
 
 ---
@@ -136,14 +98,51 @@ ETCDCTL_API=3 etcdctl snapshot restore /opt/etcd-backup.db \
 
 ```bash
 kubectl delete namespace backup-test
-multipass exec k3s-server -- sudo rm /tmp/k3s-backup-*.db /tmp/state.db.pre-restore
+multipass exec k3s-server -- sudo rm -f /root/k3s-backup.db /root/state.db.pre-restore
 ```
+
+---
+
+## Para llevar a un clúster real
+
+Estos comandos no se ejecutan en las VMs del curso. El backup guarda los objetos del API. Las imágenes, los volúmenes del nodo y los certificados en disco se restauran por otra vía.
+
+**kubeadm.** etcd corre como static pod. El snapshot se toma en un control plane. En un control plane de varios miembros, el restore se repite en cada uno con `--name`, `--initial-cluster` y `--initial-advertise-peer-urls`.
+
+```bash
+sudo ETCDCTL_API=3 etcdctl \
+  --endpoints=https://127.0.0.1:2379 \
+  --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+  --cert=/etc/kubernetes/pki/etcd/server.crt \
+  --key=/etc/kubernetes/pki/etcd/server.key \
+  snapshot save /opt/etcd-backup.db
+
+sudo ETCDCTL_API=3 etcdctl snapshot status /opt/etcd-backup.db --write-out=table
+
+sudo ETCDCTL_API=3 etcdctl snapshot restore /opt/etcd-backup.db \
+  --data-dir=/var/lib/etcd-restored
+# hostPath en /etc/kubernetes/manifests/etcd.yaml → /var/lib/etcd-restored
+```
+
+**OpenShift.** El script del operador envuelve `etcdctl snapshot save` y también guarda los static pods. Se lanza desde un master. El restore es el último recurso y el snapshot tiene que ser de la misma versión z-stream.
+
+```bash
+oc debug --as-root node/<master>
+chroot /host
+/usr/local/bin/cluster-backup.sh /home/core/assets/backup
+# snapshot_<fecha>.db y static_kuberesources_<fecha>.tar.gz
+
+sudo -E /usr/local/bin/cluster-restore.sh /home/core/assets/backup
+oc adm wait-for-stable-cluster
+```
+
+En EKS, GKE o AKS el etcd lo opera el proveedor. El backup de objetos de aplicación se hace con Velero u otra herramienta, no con `etcdctl` desde tu laptop.
 
 ---
 
 ## Preguntas de reflexión para el instructor
 
-1. ¿Por qué hay que parar k3s/etcd para hacer un backup consistente?
+1. ¿Por qué hay que parar k3s para que el backup de `state.db` sea consistente?
 2. ¿Con qué frecuencia harías backups en producción? ¿Dónde los guardarías?
-3. ¿Qué información NO está en etcd y tendría que restaurarse por otra vía?
+3. ¿Qué información queda fuera de `state.db` y habría que restaurar por otra vía?
 4. ¿Qué es el RPO (Recovery Point Objective) y cómo afecta a la frecuencia de backup?

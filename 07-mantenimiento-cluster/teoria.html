@@ -12,7 +12,7 @@
   <header class="module-header">
     <span class="badge">Módulo 07 · 4h</span>
     <h1>Mantenimiento del Cluster</h1>
-    <p class="subtitle">Cordon/drain, backup y restore, upgrade del cluster y gestión de certificados.</p>
+    <p class="subtitle">Cordon/drain, backup y restore, upgrade del cluster y gestión de certificados. El lab es k3s. kubeadm y OpenShift quedan como referencia para un clúster de trabajo.</p>
   </header>
 
   <section>
@@ -21,7 +21,7 @@
       <p>El mantenimiento del cluster es responsabilidad exclusiva del admin. Un fallo en este proceso puede dejar el cluster sin servicio:</p>
       <ul>
         <li>Actualizar el cluster sin interrumpir los workloads (rolling upgrade)</li>
-        <li>Hacer y restaurar backups del estado del cluster (etcd/SQLite)</li>
+        <li>Hacer y restaurar backups del estado del cluster (SQLite, <code>state.db</code>)</li>
         <li>Gestionar el ciclo de vida de los nodos: cordon, drain, uncordon</li>
         <li>Administrar certificados TLS del cluster (caducan cada año)</li>
       </ul>
@@ -37,42 +37,62 @@
 2. kubectl drain <nodo>     → Pods existentes migran a otros nodos
 3. [mantenimiento: OS upgrade, parche, reinicio...]
 4. kubectl uncordon <nodo>  → El nodo vuelve a aceptar pods</pre>
+      <p>En kubeadm los comandos son los mismos. En OpenShift: <code>oc adm cordon</code>, <code>oc adm drain</code>, <code>oc adm uncordon</code>.</p>
     </div>
 
     <div class="card">
       <h3>Backup del estado del cluster</h3>
-      <p>El estado de Kubernetes se almacena en etcd (kubeadm) o SQLite/kine (k3s).</p>
-      <table>
-        <thead><tr><th>Cluster</th><th>Backend</th><th>Comando backup</th></tr></thead>
-        <tbody>
-          <tr><td>kubeadm</td><td>etcd</td><td><code>etcdctl snapshot save backup.db</code></td></tr>
-          <tr><td>k3s</td><td>SQLite (kine)</td><td><code>cp /var/lib/rancher/k3s/server/db/state.db backup.db</code></td></tr>
-          <tr><td>k3s cluster-init</td><td>etcd embebido</td><td><code>k3s etcd-snapshot save</code></td></tr>
-        </tbody>
-      </table>
-      <div class="note"><strong>Regla de oro:</strong> un backup de etcd es un backup de TODO el cluster (Pods, Deployments, Secrets, RBAC...). Sin él, un fallo del control plane es irrecuperable.</div>
+      <p>Este clúster tiene un solo server. k3s guarda el API en SQLite, a través de kine, en <code>/var/lib/rancher/k3s/server/db/state.db</code>. Ahí están los Pods, Deployments, Secrets, RBAC y el resto de objetos.</p>
+      <pre class="diagram">sudo systemctl stop k3s
+sudo cp /var/lib/rancher/k3s/server/db/state.db /root/k3s-backup.db
+sudo systemctl start k3s</pre>
+      <div class="note"><strong>Regla de oro:</strong> esa copia es el backup de todos los objetos del API. Sin ella, un fallo del server es irrecuperable. Quedan fuera las imágenes, los volúmenes del nodo y los certificados de <code>/var/lib/rancher/k3s/server/tls/</code>. Al restaurar, borra <code>state.db-wal</code> y <code>state.db-shm</code> antes de arrancar: si los dejas, SQLite reaplica el journal posterior al backup.</div>
+      <p><strong>kubeadm.</strong> El estado vive en etcd. En un control plane:</p>
+      <pre class="diagram">sudo ETCDCTL_API=3 etcdctl \
+  --endpoints=https://127.0.0.1:2379 \
+  --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+  --cert=/etc/kubernetes/pki/etcd/server.crt \
+  --key=/etc/kubernetes/pki/etcd/server.key \
+  snapshot save /opt/etcd-backup.db
+
+sudo ETCDCTL_API=3 etcdctl snapshot restore /opt/etcd-backup.db \
+  --data-dir=/var/lib/etcd-restored
+# hostPath del static pod /etc/kubernetes/manifests/etcd.yaml</pre>
+      <p><strong>OpenShift.</strong> Desde un master (<code>oc debug --as-root node/&lt;master&gt;</code>, luego <code>chroot /host</code>). El restore es el último recurso y el snapshot tiene que ser de la misma versión z-stream:</p>
+      <pre class="diagram">/usr/local/bin/cluster-backup.sh /home/core/assets/backup
+sudo -E /usr/local/bin/cluster-restore.sh /home/core/assets/backup
+oc adm wait-for-stable-cluster</pre>
     </div>
 
     <div class="card">
-      <h3>Upgrade del cluster (kubeadm)</h3>
-      <p>El proceso de upgrade en un cluster kubeadm tiene un orden estricto:</p>
-      <pre class="diagram">1. Primero el CONTROL PLANE  (kubeadm upgrade apply)
-2. Luego cada WORKER uno a uno (drain → upgrade → uncordon)</pre>
-      <p>En k3s, el upgrade se realiza reinstalando k3s con el script oficial apuntando a la nueva versión.</p>
+      <h3>Upgrade del cluster</h3>
+      <p>k3s se actualiza volviendo a ejecutar el script de instalación, con <code>INSTALL_K3S_VERSION</code>. En este clúster la versión instalada es <code>v1.37.2+k3s1</code>.</p>
+      <pre class="diagram">1. Backup de state.db con k3s parado
+2. Primero el SERVER (k3s-server, servicio k3s)
+3. Luego cada WORKER, uno a uno
+   cordon → drain → mismo script → uncordon
+   (servicio k3s-agent)</pre>
+      <p>El server tiene que quedar en la versión nueva antes que los workers. Un agent no puede ir por delante del server.</p>
+      <p><strong>kubeadm.</strong> <code>kubeadm upgrade apply</code> en el primer control plane y <code>kubeadm upgrade node</code> en los demás. En cada worker: drain, instalar kubelet de esa versión, <code>systemctl restart kubelet</code>, uncordon.</p>
+      <p><strong>OpenShift.</strong> <code>oc adm upgrade channel</code> y <code>oc adm upgrade --to=4.x.y</code>. El Machine Config Pool drena los nodos. En EKS, GKE o AKS el control plane lo sube el proveedor.</p>
     </div>
 
     <div class="card">
       <h3>Gestión de certificados</h3>
-      <p>Los certificados del cluster caducan cada <strong>365 días</strong> en kubeadm. Síntomas de un certificado caducado:</p>
+      <p>Los certificados de cliente y de serving caducan a los <strong>365 días</strong>. Las CA duran 10 años. Síntomas de un certificado caducado:</p>
       <ul>
         <li><code>kubectl</code> devuelve <code>x509: certificate has expired</code></li>
-        <li>Los componentes del control plane no arrancan</li>
+        <li><code>k3s</code> no arranca</li>
       </ul>
-      <pre class="diagram"># Ver cuándo caducan los certificados (kubeadm)
-kubeadm certs check-expiration
+      <p>Se administran en <code>k3s-server</code>. Si al arrancar a un certificado le quedan menos de 90 días, k3s lo renueva solo.</p>
+      <pre class="diagram"># Ver cuándo caducan
+sudo k3s certificate check --output table
 
-# Renovar todos los certificados
-kubeadm certs renew all</pre>
+# Forzar la renovación de todos y cargar los nuevos
+sudo k3s certificate rotate
+sudo systemctl restart k3s</pre>
+      <p><strong>kubeadm.</strong> <code>kubeadm certs check-expiration</code> y <code>kubeadm certs renew all</code>. Después hay que recrear los static pods moviendo un momento los YAML de <code>/etc/kubernetes/manifests/</code>.</p>
+      <p><strong>OpenShift.</strong> Las hojas las rota la plataforma. <code>oc get csr</code> muestra las peticiones de los nodos. Forzar una hoja: <code>oc adm ocp-certificates regenerate-leaf</code> y luego <code>oc adm wait-for-stable-cluster</code>.</p>
     </div>
 
   </section>

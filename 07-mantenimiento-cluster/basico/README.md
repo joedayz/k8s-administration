@@ -40,7 +40,7 @@ kubectl get pods -n mantenimiento -o wide
 
 ## Paso 3 — Drain del nodo
 
-`drain` desaloja todos los pods del nodo y los mueve a otros nodos disponibles.
+`drain` desaloja los pods del nodo y los mueve a `k3s-server` o `k3s-worker2`. kube-proxy y el CNI van dentro del proceso `k3s-agent`, no son pods. `--ignore-daemonsets` cubre los DaemonSet que sí haya, como el ServiceLB de un Service `LoadBalancer`. El drain mueve todo lo que haya en `k3s-worker`, también pods de otros labs.
 
 ```bash
 kubectl drain k3s-worker \
@@ -67,7 +67,8 @@ multipass restart k3s-worker
 # Esperar a que el nodo vuelva
 sleep 20
 kubectl get nodes
-# k3s-worker debe volver a Ready,SchedulingDisabled (el cordon persiste tras el reboot)
+# k3s-worker vuelve a Ready,SchedulingDisabled
+# El cordon vive en el objeto Node, dentro de state.db, y sobrevive al reboot de la VM
 ```
 
 ---
@@ -114,6 +115,27 @@ kubectl get nodes
 # Todos deben mostrar Ready sin SchedulingDisabled
 kubectl describe nodes | grep "Taints:"
 # Todos <none>
+```
+
+---
+
+## Para llevar a un clúster real
+
+Estos comandos no se ejecutan en las VMs del curso. El flujo es el mismo: cordon, drain, mantenimiento, uncordon. El taint queda en el objeto Node.
+
+**kubeadm y Kubernetes vanilla.** `kubectl cordon`, `kubectl drain` y `kubectl uncordon`, con el nombre real del nodo. kube-proxy y el CNI sí suelen ser DaemonSets, así que `--ignore-daemonsets` hace falta. Un pod suelto, creado con `kubectl create` o `kubectl run --restart=Never`, detiene el drain hasta que pases `--force`, porque nadie lo volvería a crear.
+
+```bash
+kubectl drain <worker> --ignore-daemonsets --delete-emptydir-data --grace-period=30
+kubectl uncordon <worker>
+```
+
+**OpenShift.** Se usa `oc adm`. `--force` aparece a menudo porque varios pods de plataforma no tienen un controlador que los recree. Durante un upgrade el Machine Config Pool ya drena los nodos; un drain manual es para mantenimiento de un nodo concreto.
+
+```bash
+oc adm cordon <worker>
+oc adm drain <worker> --ignore-daemonsets --delete-emptydir-data --force --grace-period=600
+oc adm uncordon <worker>
 ```
 
 ---
