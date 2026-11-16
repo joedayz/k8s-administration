@@ -31,15 +31,20 @@ kubectl get pod pod-crash -n troubleshooting
 kubectl describe pod pod-crash -n troubleshooting
 # Buscar: Exit Code, Restart Count, Last State
 
-# Ver los logs del intento anterior (el actual ya murió)
+# --previous solo existe después del primer reinicio.
+# Si responde "previous terminated container not found", usa el log actual
+# o espera a que RESTARTS sea al menos 1.
 kubectl logs pod-crash -n troubleshooting --previous
 
-# SOLUCIÓN: el comando está mal configurado
-# Editar el pod para que no falle:
+# SOLUCIÓN: el comando del contenedor sale con exit 1.
+# -n va ANTES de --. Lo que va después de -- es el comando del contenedor,
+# no un flag de kubectl: si -n queda ahí, el pod se crea en default.
 kubectl delete pod pod-crash -n troubleshooting
 kubectl run pod-crash-fixed --image=busybox:1.36 \
-  --command -- sh -c "while true; do echo ok; sleep 10; done" \
-  -n troubleshooting
+  -n troubleshooting \
+  --command -- sh -c "while true; do echo ok; sleep 10; done"
+
+kubectl get pod pod-crash-fixed -n troubleshooting
 ```
 
 ---
