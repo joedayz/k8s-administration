@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Módulo 13 — Preparación Final CKA</title>
+<link rel="stylesheet" href="../assets/theory.css">
+</head>
+<body style="--accent:#4f46e5; --accent-dark:#3730a3;">
+<div class="container">
+
+  <header class="module-header">
+    <span class="badge">Módulo 13 · 3h</span>
+    <h1>Preparación Final CKA (Tácticas de Examen)</h1>
+    <p class="subtitle">Velocidad con kubectl, Multiple Schedulers, Scheduler Profiles y VPA.</p>
+  </header>
+
+  <section>
+    <h2>👤 Rol del administrador</h2>
+    <div class="role-box">
+      <p>Esta es la última clase antes del examen. El CKA no se pierde por no saber los conceptos — se pierde por <strong>tiempo</strong>. Aquí consolidamos:</p>
+      <ul>
+        <li>Velocidad imperativa y filtrado de salida (JSONPath, custom-columns, sort-by) que ahorran minutos en cada pregunta</li>
+        <li>Dos temas de scheduling que el examen incluye: Multiple Schedulers y Scheduler Profiles</li>
+        <li>El tercer pilar del autoescalado: VPA (ya vimos HPA en el 05 y el in-place resize en el 11)</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>📘 Teoría</h2>
+
+    <div class="card">
+      <h3>Por qué la velocidad gana el CKA</h3>
+      <p>El examen da ~15-20 tareas en 2 horas. Escribir un pod YAML a mano cuesta ~2 min; generarlo imperativamente cuesta ~10 segundos.</p>
+      <pre class="diagram">kubectl run / create / expose --dry-run=client -o yaml > base.yaml   ← genera el esqueleto
+kubectl explain &lt;recurso&gt;.&lt;campo&gt; --recursive                      ← estructura sin abrir docs
+kubectl get ... -o jsonpath / custom-columns / --sort-by           ← extrae solo lo que piden
+kubectl config use-context &lt;ctx&gt;                                   ← ¡SIEMPRE el 1er comando!</pre>
+      <div class="note"><strong>Regla de oro:</strong> el primer comando de CADA pregunta es cambiar al contexto correcto. Resolver en el cluster equivocado = 0 puntos.</div>
+    </div>
+
+    <div class="card">
+      <h3>Los tres niveles de autoescalado</h3>
+      <table>
+        <thead><tr><th>Mecanismo</th><th>Qué ajusta</th><th>Módulo</th></tr></thead>
+        <tbody>
+          <tr><td><strong>HPA</strong> (Horizontal)</td><td>Número de réplicas</td><td>05</td></tr>
+          <tr><td><strong>In-place Resize</strong></td><td>CPU/memoria de un pod sin reiniciarlo</td><td>11</td></tr>
+          <tr><td><strong>VPA</strong> (Vertical)</td><td>Recomienda/ajusta requests y limits</td><td>este</td></tr>
+        </tbody>
+      </table>
+      <div class="note"><strong>VPA ≠ HPA:</strong> no uses ambos sobre la misma métrica (CPU/mem) a la vez.</div>
+    </div>
+
+    <div class="card">
+      <h3>Multiple Schedulers y Scheduler Profiles</h3>
+      <p>El <code>kube-scheduler</code> por defecto no es el único posible. Puedes desplegar un segundo scheduler y hacer que pods específicos lo usen vía <code>spec.schedulerName</code>. Los <strong>Scheduler Profiles</strong> permiten que un mismo binario exponga varios perfiles nombrados.</p>
+      <pre class="diagram">Pod sin schedulerName           ──▶  default-scheduler
+Pod con schedulerName: mi-sched ──▶  tu scheduler / perfil personalizado</pre>
+    </div>
+
+  </section>
+
+  <section>
+    <h2>🧪 Laboratorios</h2>
+    <div class="lab-grid">
+      <a class="lab-card basico" href="basico/README.md">Lab Básico<small>Aceleración con kubectl (JSONPath, imperativo, SA tokens)</small></a>
+      <a class="lab-card intermedio" href="intermedio/README.md">Lab Intermedio<small>Multiple Schedulers y Scheduler Profiles</small></a>
+      <a class="lab-card avanzado" href="avanzado/README.md">Lab Avanzado<small>Vertical Pod Autoscaler (VPA)</small></a>
+    </div>
+  </section>
+
+  <footer>
+    <p><a href="../index.html">← Volver al índice</a></p>
+  </footer>
+
+</div>
+</body>
+</html>

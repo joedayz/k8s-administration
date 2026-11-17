@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-hambrienta
+  namespace: cka-vpa
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: app-hambrienta
+  template:
+    metadata:
+      labels:
+        app: app-hambrienta
+    spec:
+      containers:
+      - name: stress
+        image: polinux/stress
+        command: ["stress"]
+        # Pide 50m CPU / 32Mi pero consume mucho más — VPA lo detectará.
+        args: ["--cpu", "1", "--vm", "1", "--vm-bytes", "128M", "--timeout", "3600s"]
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "32Mi"
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-app-hambrienta
+  namespace: cka-vpa
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: app-hambrienta
+  updatePolicy:
+    # "Off" = solo recomienda, no toca los pods. Es el modo más seguro
+    # y el más preguntado en el examen. Otros modos: Initial, Recreate, Auto.
+    updateMode: "Off"

@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mi-scheduler-config
+  namespace: kube-system
+data:
+  mi-scheduler-config.yaml: |
+    apiVersion: kubescheduler.config.k8s.io/v1
+    kind: KubeSchedulerConfiguration
+    profiles:
+      # El nombre del perfil ES el schedulerName que usarán los pods.
+      - schedulerName: mi-scheduler
+    leaderElection:
+      leaderElect: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mi-scheduler
+  namespace: kube-system
+  labels:
+    app: mi-scheduler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mi-scheduler
+  template:
+    metadata:
+      labels:
+        app: mi-scheduler
+    spec:
+      serviceAccountName: mi-scheduler
+      containers:
+      - name: kube-scheduler
+        image: registry.k8s.io/kube-scheduler:v1.37.2
+        command:
+        - /usr/local/bin/kube-scheduler
+        - --config=/etc/kubernetes/mi-scheduler/mi-scheduler-config.yaml
+        - --v=2
+        volumeMounts:
+        - name: config
+          mountPath: /etc/kubernetes/mi-scheduler
+      volumes:
+      - name: config
+        configMap:
+          name: mi-scheduler-config
