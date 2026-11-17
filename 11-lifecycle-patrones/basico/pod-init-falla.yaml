@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-init-falla
+  namespace: lifecycle-patrones
+spec:
+  initContainers:
+  - name: init-que-falla
+    image: busybox:1.36
+    command: ['sh', '-c', 'echo "fallando a proposito"; exit 1']
+  containers:
+  - name: nginx
+    image: nginx:alpine

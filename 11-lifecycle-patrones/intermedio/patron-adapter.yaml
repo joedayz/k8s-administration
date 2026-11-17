@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: patron-adapter
+  namespace: lifecycle-patrones
+spec:
+  containers:
+  # Genera métricas en un formato propietario de texto plano.
+  - name: app-principal
+    image: busybox:1.36
+    command: ['sh', '-c', 'while true; do echo "peticiones=42 errores=3 latencia_ms=120" > /metrics/raw.txt; sleep 5; done']
+    volumeMounts:
+    - name: metrics
+      mountPath: /metrics
+  # Traduce ese formato propietario al formato que entiende Prometheus.
+  - name: adapter-prometheus
+    image: busybox:1.36
+    command:
+    - sh
+    - -c
+    - |
+      while true; do
+        peticiones=$(sed -n 's/.*peticiones=\([0-9]*\).*/\1/p' /metrics/raw.txt)
+        errores=$(sed -n 's/.*errores=\([0-9]*\).*/\1/p' /metrics/raw.txt)
+        latencia=$(sed -n 's/.*latencia_ms=\([0-9]*\).*/\1/p' /metrics/raw.txt)
+        {
+          echo "# HELP app_peticiones_total Peticiones procesadas"
+          echo "# TYPE app_peticiones_total counter"
+          echo "app_peticiones_total $peticiones"
+          echo "app_errores_total $errores"
+          echo "app_latencia_ms $latencia"
+        } > /metrics/formato-prometheus.txt
+        sleep 5
+      done
+    volumeMounts:
+    - name: metrics
+      mountPath: /metrics
+  volumes:
+  - name: metrics
+    emptyDir: {}

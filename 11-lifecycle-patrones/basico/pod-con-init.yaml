@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-con-init
+  namespace: lifecycle-patrones
+spec:
+  initContainers:
+  - name: esperar-config
+    image: busybox:1.36
+    command: ['sh', '-c', 'echo "Esperando configuracion..."; sleep 5; echo "Configuracion lista"']
+  - name: descargar-contenido
+    image: busybox:1.36
+    command: ['sh', '-c', 'echo "generado en init" > /datos/index.html']
+    volumeMounts:
+    - name: datos
+      mountPath: /datos
+  containers:
+  - name: nginx
+    image: nginx:alpine
+    volumeMounts:
+    - name: datos
+      mountPath: /usr/share/nginx/html
+  volumes:
+  - name: datos
+    emptyDir: {}

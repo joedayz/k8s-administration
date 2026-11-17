@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: patron-sidecar
+  namespace: lifecycle-patrones
+spec:
+  containers:
+  - name: app-principal
+    image: busybox:1.36
+    command: ['sh', '-c', 'i=0; while true; do echo "linea de log $i $(date)" >> /var/log/app.log; i=$((i+1)); sleep 2; done']
+    volumeMounts:
+    - name: logs
+      mountPath: /var/log
+  - name: sidecar-log-shipper
+    image: busybox:1.36
+    command: ['sh', '-c', 'tail -F /var/log/app.log']
+    volumeMounts:
+    - name: logs
+      mountPath: /var/log
+  volumes:
+  - name: logs
+    emptyDir: {}

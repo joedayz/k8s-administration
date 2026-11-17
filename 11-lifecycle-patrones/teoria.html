@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Módulo 11 — Lifecycle de Pods y Patrones Multi-Container</title>
+<link rel="stylesheet" href="../assets/theory.css">
+</head>
+<body style="--accent:#0d9488; --accent-dark:#0f766e;">
+<div class="container">
+
+  <header class="module-header">
+    <span class="badge">Módulo 11 · 3h</span>
+    <h1>Lifecycle de Pods y Patrones Multi-Container</h1>
+    <p class="subtitle">Init Containers, patrones Sidecar/Ambassador/Adapter, e In-place Pod Resize.</p>
+  </header>
+
+  <section>
+    <h2>👤 Rol del administrador</h2>
+    <div class="role-box">
+      <p>Un pod no es "un contenedor" — es un ciclo de vida con fases bien definidas y, muy a menudo, varios contenedores colaborando. Como admin necesitas:</p>
+      <ul>
+        <li>Saber diagnosticar por qué un pod se queda atascado en <code>Init:0/1</code> o similar</li>
+        <li>Reconocer los patrones multi-container (sidecar, ambassador, adapter) cuando los ves en producción</li>
+        <li>Aprovechar el redimensionamiento en caliente de pods para ajustar recursos sin downtime</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>📘 Teoría</h2>
+
+    <div class="card">
+      <h3>Fases del ciclo de vida de un Pod</h3>
+      <pre class="diagram">Pending ──▶ Init containers (secuencial) ──▶ Containers principales (paralelo) ──▶ Running ──▶ Succeeded / Failed</pre>
+      <table>
+        <thead><tr><th>Fase</th><th>Qué significa</th></tr></thead>
+        <tbody>
+          <tr><td><code>Init:N/M</code></td><td>Van N de M init containers completados</td></tr>
+          <tr><td><code>Running</code></td><td>Todos los init containers terminaron y al menos un contenedor principal corre</td></tr>
+        </tbody>
+      </table>
+      <div class="note"><strong>Importante:</strong> los init containers corren uno tras otro, no en paralelo, y deben terminar con <code>exit 0</code> para que el pod avance.</div>
+    </div>
+
+    <div class="card">
+      <h3>Patrones Multi-Container</h3>
+      <p>Varios contenedores en el mismo pod comparten red (localhost) y, opcionalmente, volúmenes.</p>
+      <table>
+        <thead><tr><th>Patrón</th><th>Qué hace</th><th>Ejemplo real</th></tr></thead>
+        <tbody>
+          <tr><td>Sidecar</td><td>Contenedor auxiliar que extiende/monitorea al principal</td><td>Recolector de logs, proxy de service mesh</td></tr>
+          <tr><td>Ambassador</td><td>Proxy que simplifica cómo el contenedor principal habla con el exterior</td><td>Conectar a un backend sin saber su IP real</td></tr>
+          <tr><td>Adapter</td><td>Normaliza la salida del contenedor principal a un formato estándar</td><td>Convertir métricas propietarias a Prometheus</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>In-place Pod Resize (GA desde 1.33)</h3>
+      <p>Tradicionalmente, cambiar <code>resources.requests/limits</code> obligaba a recrear el pod. Ahora puedes redimensionar un pod ya corriendo, sin reiniciarlo.</p>
+      <pre class="diagram">PATCH .../resize
+   │
+   ▼
+¿El nodo tiene capacidad?  ──No──▶  Rechazado de inmediato (403 NodeCapacity)
+   │ Sí
+   ▼
+¿resizePolicy permite sin restart?  ──No──▶  Kubernetes reinicia el contenedor
+   │ Sí
+   ▼
+Recursos actualizados en caliente, sin restart</pre>
+    </div>
+
+  </section>
+
+  <section>
+    <h2>🧪 Laboratorios</h2>
+    <div class="lab-grid">
+      <a class="lab-card basico" href="basico/README.md">Lab Básico<small>Init Containers</small></a>
+      <a class="lab-card intermedio" href="intermedio/README.md">Lab Intermedio<small>Patrones Sidecar, Ambassador y Adapter</small></a>
+      <a class="lab-card avanzado" href="avanzado/README.md">Lab Avanzado<small>In-place Pod Resize</small></a>
+    </div>
+  </section>
+
+  <footer>
+    <p><a href="../index.html">← Volver al índice</a></p>
+  </footer>
+
+</div>
+</body>
+</html>
