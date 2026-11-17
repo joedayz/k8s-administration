@@ -12,6 +12,10 @@ Cifrar los `Secret` en el datastore del cluster (equivalente a etcd en k3s) usan
 
 ## Parte A — Encrypt Secret at Rest
 
+> **Importante:** realiza esta parte únicamente en un cluster de práctica nuevo y descartable, sin cifrado de Secrets ya configurado. No la repitas sobre un cluster donde ya se ejecutó: generar otra clave con el mismo nombre puede volver ilegibles los Secrets existentes. Los comandos siguientes se detendrán si los archivos que crean ya existen; también debes comprobar que no haya cifrado configurado mediante otros archivos o argumentos de k3s.
+>
+> Conserva una copia segura de la configuración y la clave junto con los respaldos del datastore. No publiques la clave ni la elimines mientras existan datos cifrados con ella.
+
 ### Paso 1 — Confirmar que hoy los Secrets están en texto plano
 
 ```bash
@@ -35,9 +39,11 @@ Resultado esperado: `1` — el password aparece **tal cual, en bytes planos**, d
 ### Paso 2 — Generar la clave y la EncryptionConfiguration
 
 ```bash
+multipass exec k3s-server -- sudo sh -c 'set -eu
+umask 077
+set -C
 ENCKEY=$(openssl rand -base64 32)
-
-multipass exec k3s-server -- sudo sh -c "cat > /var/lib/rancher/k3s/server/encryption-config-manual.yaml <<EOF
+cat > /var/lib/rancher/k3s/server/encryption-config-manual.yaml <<EOF
 apiVersion: apiserver.config.k8s.io/v1
 kind: EncryptionConfiguration
 resources:
@@ -49,20 +55,24 @@ resources:
             - name: key1
               secret: $ENCKEY
       - identity: {}
-EOF"
+EOF'
 ```
 
 (El archivo `encryption-config.yaml` de este lab es la misma plantilla, con un placeholder para pegar tu propia clave si prefieres editarlo a mano.)
 
 ### Paso 3 — Apuntar kube-apiserver al archivo y reiniciar
 
+Este comando solo sirve cuando `/etc/rancher/k3s/config.yaml` aún no existe. Si ya existe, **no lo sobrescribas**: detén el lab y usa un cluster de práctica nuevo.
+
 ```bash
-multipass exec k3s-server -- sudo sh -c 'cat > /etc/rancher/k3s/config.yaml <<EOF
+multipass exec k3s-server -- sudo sh -c 'set -eu
+umask 077
+set -C
+cat > /etc/rancher/k3s/config.yaml <<EOF
 kube-apiserver-arg:
   - "encryption-provider-config=/var/lib/rancher/k3s/server/encryption-config-manual.yaml"
-EOF'
-
-multipass exec k3s-server -- sudo systemctl restart k3s
+EOF' &&
+  multipass exec k3s-server -- sudo systemctl restart k3s
 
 # Espera a que el nodo vuelva a Ready
 kubectl get nodes -w
@@ -93,7 +103,7 @@ multipass exec k3s-server -- sudo sh -c \
   | grep -c "$HEXVAL"
 # Sigue devolviendo 1
 
-# Forzar la reescritura (equivalente en producción a: kubectl get secrets -A -o json | kubectl replace -f -)
+# Forzar la reescritura de este Secret de prueba
 kubectl get secret credencial-db -n encrypt-demo -o yaml | kubectl replace -f -
 
 multipass exec k3s-server -- sudo sh -c \
@@ -102,6 +112,8 @@ multipass exec k3s-server -- sudo sh -c \
   | grep -c "$HEXVAL"
 # Ahora 0 — ya quedó cifrado
 ```
+
+Si aparece `invalid padding on input`, detén el lab: el API server no puede descifrar el Secret. Una causa posible es que la clave original haya sido reemplazada. No generes otra clave ni elimines la configuración; recupera la clave original desde un respaldo seguro antes de planificar la recuperación.
 
 ---
 
@@ -167,11 +179,9 @@ multipass exec k3s-worker -- ip -d link show flannel.1
 
 ```bash
 kubectl delete namespace encrypt-demo cni-demo
-
-# Revertir el cifrado (opcional, si no vas a seguir usándolo en otros labs)
-multipass exec k3s-server -- sudo rm -f /etc/rancher/k3s/config.yaml /var/lib/rancher/k3s/server/encryption-config-manual.yaml
-multipass exec k3s-server -- sudo systemctl restart k3s
 ```
+
+**No elimines la configuración ni la clave para desactivar el cifrado:** pueden existir Secrets cifrados en otros namespaces. Desactivarlo requiere una migración verificada de todos los datos afectados y un respaldo recuperable.
 
 ---
 
