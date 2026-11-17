@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: registro-privado
+  namespace: imgsec-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: registro-privado
+  template:
+    metadata:
+      labels:
+        app: registro-privado
+    spec:
+      containers:
+      - name: registry
+        image: registry:2
+        ports:
+        - containerPort: 5000
+        env:
+        - name: REGISTRY_AUTH
+          value: htpasswd
+        - name: REGISTRY_AUTH_HTPASSWD_REALM
+          value: "Registro Privado"
+        - name: REGISTRY_AUTH_HTPASSWD_PATH
+          value: /auth/htpasswd
+        volumeMounts:
+        - name: auth
+          mountPath: /auth
+      volumes:
+      - name: auth
+        secret:
+          secretName: registry-auth
+          items:
+          - key: htpasswd
+            path: htpasswd
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: registro-privado
+  namespace: imgsec-demo
+spec:
+  type: NodePort
+  selector:
+    app: registro-privado
+  ports:
+  - port: 5000
+    targetPort: 5000
+    nodePort: 30500

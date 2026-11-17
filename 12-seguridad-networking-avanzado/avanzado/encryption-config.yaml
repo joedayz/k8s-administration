@@ -1,0 +1,15 @@
+apiVersion: apiserver.config.k8s.io/v1
+kind: EncryptionConfiguration
+resources:
+  - resources:
+      - secrets
+    providers:
+      # El primer provider de la lista es el que se usa para ESCRIBIR.
+      # Todos los providers listados se intentan al LEER (permite migrar
+      # sin downtime: agregas aescbc arriba, luego reencriptas, luego
+      # puedes quitar identity).
+      - aescbc:
+          keys:
+            - name: key1
+              secret: REEMPLAZA_ESTO_CON_UNA_CLAVE_GENERADA   # openssl rand -base64 32
+      - identity: {}

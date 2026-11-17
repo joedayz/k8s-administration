@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Módulo 12 — Seguridad de Imágenes, Networking Avanzado y Cifrado</title>
+<link rel="stylesheet" href="../assets/theory.css">
+</head>
+<body style="--accent:#b45309; --accent-dark:#92400e;">
+<div class="container">
+
+  <header class="module-header">
+    <span class="badge">Módulo 12 · 4h</span>
+    <h1>Seguridad de Imágenes, Networking Avanzado y Cifrado</h1>
+    <p class="subtitle">imagePullSecrets, Gateway API, Encrypt at Rest, y diagnóstico de CNI/kube-proxy.</p>
+  </header>
+
+  <section>
+    <h2>👤 Rol del administrador</h2>
+    <div class="role-box">
+      <p>Este módulo cierra tres frentes distintos que todo admin de Kubernetes termina tocando tarde o temprano:</p>
+      <ul>
+        <li>Seguridad de la cadena de suministro: de dónde vienen las imágenes y quién puede jalarlas</li>
+        <li>Networking de nueva generación: Gateway API, el sucesor declarado de Ingress</li>
+        <li>Protección de datos en reposo, y cómo se ve "por dentro" el plano de red (CNI, kube-proxy)</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>📘 Teoría</h2>
+
+    <div class="card">
+      <h3>Gateway API vs. Ingress</h3>
+      <p>Gateway API separa responsabilidades que Ingress mezclaba en un solo objeto:</p>
+      <pre class="diagram">GatewayClass (lo define el admin de plataforma)
+      │
+      ▼
+   Gateway (una instancia concreta de balanceador)
+      │
+      ▼
+   HTTPRoute (lo define cada equipo de app, sin tocar infraestructura compartida)</pre>
+    </div>
+
+    <div class="card">
+      <h3>Cifrado de Secrets en reposo</h3>
+      <p>Por defecto, los <code>Secret</code> se guardan en etcd en texto plano, codificados solo en base64 (que no es cifrado). <code>EncryptionConfiguration</code> le dice al API server que cifre ciertos recursos antes de escribirlos a etcd.</p>
+      <pre class="diagram">kubectl create secret ──▶ API server ──▶ [cifrado con la clave de EncryptionConfiguration] ──▶ etcd</pre>
+      <div class="note"><strong>Importante:</strong> habilitar el cifrado no recifra los Secrets ya existentes — hay que reescribirlos (reencrypt) explícitamente.</div>
+    </div>
+
+    <div class="card">
+      <h3>CNI y modos de kube-proxy</h3>
+      <p><strong>CNI</strong>: el plugin que le da IP a cada pod y conecta esa IP a la red del cluster (k3s usa Flannel/VXLAN por defecto). <strong>kube-proxy</strong>: programa las reglas que convierten un <code>ClusterIP</code> en conexiones reales a los pods detrás.</p>
+      <table>
+        <thead><tr><th>Modo</th><th>Cómo funciona</th><th>Cuándo se usa</th></tr></thead>
+        <tbody>
+          <tr><td><code>iptables</code></td><td>Reglas de netfilter, recorridas secuencialmente</td><td>Default histórico</td></tr>
+          <tr><td><code>ipvs</code></td><td>Tablas hash en el kernel, balanceo O(1)</td><td>Clusters grandes</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </section>
+
+  <section>
+    <h2>🧪 Laboratorios</h2>
+    <div class="lab-grid">
+      <a class="lab-card basico" href="basico/README.md">Lab Básico<small>Image Security: imagePullSecrets</small></a>
+      <a class="lab-card intermedio" href="intermedio/README.md">Lab Intermedio<small>Gateway API</small></a>
+      <a class="lab-card avanzado" href="avanzado/README.md">Lab Avanzado<small>Encrypt at Rest y diagnóstico CNI/kube-proxy</small></a>
+    </div>
+  </section>
+
+  <footer>
+    <p><a href="../index.html">← Volver al índice</a></p>
+  </footer>
+
+</div>
+</body>
+</html>
