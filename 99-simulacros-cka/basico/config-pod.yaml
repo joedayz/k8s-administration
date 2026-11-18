@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    run: config-pod
+  name: config-pod
+  namespace: cka
+spec:
+  containers:
+  - image: alpine:3.19
+    name: config-pod
+    command: ["sleep", "3600"]
+    envFrom:
+    - configMapRef:
+        name: app-config

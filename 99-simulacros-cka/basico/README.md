@@ -182,8 +182,8 @@ kubectl exec config-pod -n cka -- env | grep LOG_LEVEL
 ```bash
 kubectl create job pi-calc \
   --image=perl:5.34 \
+  -n cka \
   -- perl -Mbignum=bpi -wle 'print bpi(2000)' \
-  -n cka
 ```
 
 **Verificación:**
