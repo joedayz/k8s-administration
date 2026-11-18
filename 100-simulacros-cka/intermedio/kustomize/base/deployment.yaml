@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tienda
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tienda
+  template:
+    metadata:
+      labels:
+        app: tienda
+    spec:
+      containers:
+      - name: web
+        image: nginx:1.27-alpine
+        ports:
+        - containerPort: 80
+        env:
+        - name: ENTORNO
+          valueFrom:
+            configMapKeyRef:
+              name: tienda-config
+              key: ENTORNO
+        resources:
+          requests:
+            cpu: 20m
+            memory: 32Mi

@@ -1,0 +1,204 @@
+# Simulacro CKA II — escenario con 5 problemas (namespace cka2-trouble)
+# NO leas este archivo antes de intentar el reto: diagnostica con kubectl.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cka2-trouble
+---
+# Problema A: el Service apunta a un targetPort en el que nadie escucha
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalogo
+  namespace: cka2-trouble
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: catalogo
+  template:
+    metadata:
+      labels:
+        app: catalogo
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: catalogo-svc
+  namespace: cka2-trouble
+spec:
+  selector:
+    app: catalogo
+  ports:
+  - port: 80
+    targetPort: 8080
+---
+# Problema B: readinessProbe a una ruta que devuelve 404 → 0 endpoints
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pagos
+  namespace: cka2-trouble
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: pagos
+  template:
+    metadata:
+      labels:
+        app: pagos
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 80
+          periodSeconds: 5
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pagos-svc
+  namespace: cka2-trouble
+spec:
+  selector:
+    app: pagos
+  ports:
+  - port: 80
+    targetPort: 80
+---
+# Problema C: nodeSelector con una label que ningún nodo tiene → Pending
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reportes
+  namespace: cka2-trouble
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reportes
+  template:
+    metadata:
+      labels:
+        app: reportes
+    spec:
+      nodeSelector:
+        disktype: nvme
+      containers:
+      - name: app
+        image: busybox:1.36
+        command: ["sh", "-c", "while true; do date >> /tmp/reporte.log; sleep 30; done"]
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+---
+# Problema D: PVC con una StorageClass inexistente → PVC y pod Pending
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: datos-inventario
+  namespace: cka2-trouble
+spec:
+  storageClassName: rapido
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 64Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventario
+  namespace: cka2-trouble
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inventario
+  template:
+    metadata:
+      labels:
+        app: inventario
+    spec:
+      containers:
+      - name: app
+        image: busybox:1.36
+        command: ["sh", "-c", "echo ok > /datos/estado; sleep 3600"]
+        volumeMounts:
+        - name: datos
+          mountPath: /datos
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+      volumes:
+      - name: datos
+        persistentVolumeClaim:
+          claimName: datos-inventario
+---
+# Problema E: secretKeyRef a una clave que no existe → CreateContainerConfigError
+apiVersion: v1
+kind: Secret
+metadata:
+  name: smtp-cred
+  namespace: cka2-trouble
+type: Opaque
+stringData:
+  usuario: notificador
+  pass: Sm7pS3cr3t
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notificador
+  namespace: cka2-trouble
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notificador
+  template:
+    metadata:
+      labels:
+        app: notificador
+    spec:
+      containers:
+      - name: app
+        image: busybox:1.36
+        command: ["sh", "-c", "echo \"conectado como $SMTP_USER\"; sleep 3600"]
+        env:
+        - name: SMTP_USER
+          valueFrom:
+            secretKeyRef:
+              name: smtp-cred
+              key: usuario
+        - name: SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: smtp-cred
+              key: password
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi

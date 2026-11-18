@@ -1,0 +1,100 @@
+# Simulacro CKA II — Reto 8: pods que se reinician (namespace cka2-crash)
+# NO leas este archivo antes de intentar el reto: diagnostica con kubectl.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cka2-crash
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cache
+  namespace: cka2-crash
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cache
+  template:
+    metadata:
+      labels:
+        app: cache
+    spec:
+      containers:
+      - name: stress
+        image: polinux/stress:1.0.4
+        command: ["stress"]
+        args: ["--vm", "1", "--vm-bytes", "60M", "--vm-hang", "0"]
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 32Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: indexador
+  namespace: cka2-crash
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: indexador
+  template:
+    metadata:
+      labels:
+        app: indexador
+    spec:
+      containers:
+      - name: app
+        image: busybox:1.36
+        command: ["sh", "-c", "echo 'cargando índice...'; sleep 25; touch /tmp/listo; echo 'índice cargado'; sleep 3600"]
+        livenessProbe:
+          exec:
+            command: ["cat", "/tmp/listo"]
+          periodSeconds: 5
+          failureThreshold: 2
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: facturador-config
+  namespace: cka2-crash
+data:
+  MODO: produccion
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: facturador
+  namespace: cka2-crash
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: facturador
+  template:
+    metadata:
+      labels:
+        app: facturador
+    spec:
+      containers:
+      - name: app
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - |
+          echo "facturador v2 arrancando"
+          if [ -z "$MODO" ]; then echo "ERROR: falta la variable MODO" >&2; exit 3; fi
+          echo "modo=$MODO"; sleep 3600
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi

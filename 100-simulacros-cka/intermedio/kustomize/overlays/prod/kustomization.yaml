@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: cka2-prod
+namePrefix: prod-
+labels:
+- pairs:
+    entorno: prod
+  includeSelectors: false
+resources:
+- ../../base
+images:
+- name: nginx
+  newTag: 1.28-alpine
+replicas:
+- name: tienda
+  count: 3
+configMapGenerator:
+- name: tienda-config
+  behavior: merge
+  literals:
+  - ENTORNO=produccion
+patches:
+- path: recursos-prod.yaml

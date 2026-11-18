@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Módulo 100 — Simulacros CKA II</title>
+<link rel="stylesheet" href="../assets/theory.css">
+</head>
+<body style="--accent:#0f766e; --accent-dark:#115e59;">
+<div class="container">
+
+  <header class="module-header">
+    <span class="badge">Módulo 100 · 5h</span>
+    <h1>Simulacros CKA II</h1>
+    <p class="subtitle">Segunda ronda de retos estilo examen CKA, distintos a los del módulo 99.</p>
+  </header>
+
+  <section>
+    <h2>📋 Formato del examen CKA</h2>
+    <div class="card">
+      <table>
+        <thead><tr><th>Aspecto</th><th>Detalle</th></tr></thead>
+        <tbody>
+          <tr><td>Duración</td><td>2 horas</td></tr>
+          <tr><td>Tareas</td><td>15-20 ejercicios prácticos</td></tr>
+          <tr><td>Entorno</td><td>Terminal Linux con kubectl preconfigurado (varios contextos, ssh a los nodos)</td></tr>
+          <tr><td>Nota de aprobado</td><td>66%</td></tr>
+          <tr><td>Herramientas permitidas</td><td>kubectl, documentación oficial de Kubernetes</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>📊 Dominios evaluados</h2>
+    <div class="card">
+      <table>
+        <thead><tr><th>Dominio</th><th>Peso</th></tr></thead>
+        <tbody>
+          <tr><td>Cluster Architecture, Installation & Configuration</td><td>25%</td></tr>
+          <tr><td>Workloads & Scheduling</td><td>15%</td></tr>
+          <tr><td>Services & Networking</td><td>20%</td></tr>
+          <tr><td>Storage</td><td>10%</td></tr>
+          <tr><td>Troubleshooting</td><td>30%</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>🎯 Estrategias nuevas para el examen CKA</h2>
+    <div class="card">
+      <ol>
+        <li><strong>El contexto primero, siempre</strong> — ejecuta el <code>kubectl config use-context ...</code> de cada pregunta antes de leer el resto</li>
+        <li><strong>Edita en vivo solo lo mutable</strong> — <code>kubectl set image/env/resources</code> y <code>kubectl patch</code> son más rápidos que <code>kubectl edit</code>; para campos inmutables de un pod usa <code>kubectl replace --force -f</code></li>
+        <li><strong>Lee los eventos antes que los logs</strong> — <code>kubectl events</code> / <code>kubectl get events --field-selector</code> dicen <em>por qué</em> algo no arranca</li>
+        <li><strong><code>kubectl explain --recursive</code></strong> — el árbol completo de campos cuando no recuerdas dónde va algo</li>
+        <li><strong>Verifica como el corrector</strong> — <code>get -o jsonpath</code>, <code>auth can-i</code>, <code>rollout history</code>; un <code>apply</code> sin errores no es una respuesta correcta</li>
+        <li><strong>Marca y sigue</strong> — anota las preguntas dudosas y vuelve al final; las de troubleshooting suelen valer más</li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h3>Atajos de kubectl para el examen (nuevos)</h3>
+      <pre class="diagram"># ~/.vimrc mínimo para YAML
+set expandtab tabstop=2 shiftwidth=2 autoindent
+
+# Contextos
+kubectl config get-contexts
+kubectl config use-context &lt;contexto&gt;
+kubectl config set-context --current --namespace=cka2
+
+# Generar YAML de recursos menos obvios
+kubectl create cronjob limpieza --image=busybox:1.36 --schedule="*/5 * * * *" \
+  --dry-run=client -o yaml -- sh -c 'date' &gt; cronjob.yaml
+kubectl create ingress web --class=traefik --rule="web.local/*=web-svc:80" \
+  --dry-run=client -o yaml &gt; ingress.yaml
+kubectl create role lector --verb=get,list --resource=pods,pods/log \
+  --dry-run=client -o yaml &gt; role.yaml
+kubectl create pdb web-pdb --selector=app=web --min-available=2 \
+  --dry-run=client -o yaml &gt; pdb.yaml
+
+# Modificar workloads sin abrir el editor
+kubectl set image deployment/web nginx=nginx:1.28-alpine
+kubectl set env deployment/web MODO=produccion
+kubectl set resources deployment/web --requests=cpu=50m,memory=64Mi --limits=memory=128Mi
+
+# Árbol completo de campos
+kubectl explain pod.spec.topologySpreadConstraints --recursive
+
+# Eventos filtrados
+kubectl get events -n cka2 --field-selector type=Warning --sort-by=.lastTimestamp
+kubectl events -n cka2 --for pod/mi-pod --types=Warning</pre>
+    </div>
+  </section>
+
+  <section>
+    <h2>🧪 Laboratorios</h2>
+    <div class="lab-grid">
+      <a class="lab-card basico" href="basico/README.md">Lab Básico<small>10 retos rápidos: configuración, rollouts, probes, scheduling y cuotas</small></a>
+      <a class="lab-card intermedio" href="intermedio/README.md">Lab Intermedio<small>8 retos: StatefulSets, Jobs, sidecars, NetworkPolicy, Ingress, Gateway API, PV y Kustomize</small></a>
+      <a class="lab-card avanzado" href="avanzado/README.md">Lab Avanzado<small>5 retos completos: troubleshooting, DNS, PDB, CSR y etcd snapshots</small></a>
+    </div>
+  </section>
+
+  <footer>
+    <p><a href="../index.html">← Volver al índice</a></p>
+  </footer>
+
+</div>
+</body>
+</html>

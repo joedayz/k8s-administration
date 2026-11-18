@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: cka2-dev
+namePrefix: dev-
+labels:
+- pairs:
+    entorno: dev
+  includeSelectors: false
+resources:
+- ../../base
+configMapGenerator:
+- name: tienda-config
+  behavior: merge
+  literals:
+  - ENTORNO=desarrollo
