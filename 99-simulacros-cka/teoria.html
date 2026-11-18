@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Módulo 10 — Simulacros CKA</title>
+<link rel="stylesheet" href="../assets/theory.css">
+</head>
+<body style="--accent:#4f46e5; --accent-dark:#3730a3;">
+<div class="container">
+
+  <header class="module-header">
+    <span class="badge">Módulo 10 · 5h</span>
+    <h1>Simulacros CKA</h1>
+    <p class="subtitle">Retos prácticos estilo examen CKA con límite de tiempo.</p>
+  </header>
+
+  <section>
+    <h2>📋 Formato del examen CKA</h2>
+    <div class="card">
+      <table>
+        <thead><tr><th>Aspecto</th><th>Detalle</th></tr></thead>
+        <tbody>
+          <tr><td>Duración</td><td>2 horas</td></tr>
+          <tr><td>Tareas</td><td>15-20 ejercicios prácticos</td></tr>
+          <tr><td>Entorno</td><td>Terminal Linux con kubectl preconfigurado</td></tr>
+          <tr><td>Nota de aprobado</td><td>66%</td></tr>
+          <tr><td>Herramientas permitidas</td><td>kubectl, documentación oficial de Kubernetes</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>📊 Dominios evaluados</h2>
+    <div class="card">
+      <table>
+        <thead><tr><th>Dominio</th><th>Peso</th></tr></thead>
+        <tbody>
+          <tr><td>Cluster Architecture, Installation & Configuration</td><td>25%</td></tr>
+          <tr><td>Workloads & Scheduling</td><td>15%</td></tr>
+          <tr><td>Services & Networking</td><td>20%</td></tr>
+          <tr><td>Storage</td><td>10%</td></tr>
+          <tr><td>Troubleshooting</td><td>30%</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>🎯 Estrategias para el examen CKA</h2>
+    <div class="card">
+      <ol>
+        <li><strong>Gestiona el tiempo</strong> — si un ejercicio te lleva más de 5 minutos, salta al siguiente</li>
+        <li><strong>Usa <code>kubectl</code> imperativo</strong> cuando sea posible: <code>kubectl create</code>, <code>kubectl expose</code>, <code>kubectl scale</code></li>
+        <li><strong>Familiarízate con JSONPath</strong> — muchos ejercicios piden extraer datos específicos</li>
+        <li><strong>Guarda los manifiestos</strong> — crea archivos YAML para poder re-aplicarlos si algo falla</li>
+        <li><strong>Usa <code>kubectl explain</code></strong> — es tu documentación offline durante el examen</li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h3>Atajos de kubectl para el examen</h3>
+      <pre class="diagram"># Alias obligatorios
+alias k=kubectl
+alias kgp="kubectl get pods"
+alias kgs="kubectl get svc"
+alias kgd="kubectl get deploy"
+alias kgno="kubectl get nodes"
+alias kdn="kubectl describe node"
+
+# Dry-run para generar YAMLs rápidamente
+kubectl create deployment nginx --image=nginx --dry-run=client -o yaml > deploy.yaml
+
+# Explain para ver la estructura de un recurso
+kubectl explain pod.spec.containers.resources
+kubectl explain deployment.spec.strategy.rollingUpdate
+
+# JSONPath para extraer datos
+kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.namespace}{"\n"}{end}'</pre>
+    </div>
+  </section>
+
+  <section>
+    <h2>🧪 Laboratorios</h2>
+    <div class="lab-grid">
+      <a class="lab-card basico" href="basico/README.md">Lab Básico<small>10 retos rápidos: Workloads y Services</small></a>
+      <a class="lab-card intermedio" href="intermedio/README.md">Lab Intermedio<small>5 retos: Networking, Storage y RBAC</small></a>
+      <a class="lab-card avanzado" href="avanzado/README.md">Lab Avanzado<small>4 retos completos: Troubleshooting y Cluster ops</small></a>
+    </div>
+  </section>
+
+  <footer>
+    <p><a href="../index.html">← Volver al índice</a></p>
+  </footer>
+
+</div>
+</body>
+</html>

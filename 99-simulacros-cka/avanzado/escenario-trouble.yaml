@@ -1,0 +1,71 @@
+# Escenario con 4 problemas para diagnosticar y resolver
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: cka-trouble
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:esta-imagen-no-existe-404
+        resources:
+          requests:
+            cpu: "20m"
+            memory: "32Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-svc
+  namespace: cka-trouble
+spec:
+  selector:
+    app: frontend-v2       # PROBLEMA: selector incorrecto (debería ser app=frontend)
+  ports:
+  - port: 80
+    targetPort: 80
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: db-pod
+  namespace: cka-trouble
+  labels:
+    app: db
+spec:
+  containers:
+  - name: postgres
+    image: postgres:15-alpine
+    env:
+    - name: POSTGRES_PASSWORD
+      value: "secret"
+    resources:
+      requests:
+        cpu: "50"          # PROBLEMA: 50 cores — imposible, quedará Pending
+        memory: "50Gi"
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: api-pod
+  namespace: cka-trouble
+  labels:
+    app: api
+spec:
+  containers:
+  - name: api
+    image: nginx:alpine
+    command: ["sh", "-c", "exit 1"]    # PROBLEMA: el comando siempre falla
+    resources:
+      requests:
+        cpu: "20m"
+        memory: "32Mi"
