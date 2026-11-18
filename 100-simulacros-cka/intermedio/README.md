@@ -1,10 +1,10 @@
 # Lab 100 — Intermedio: Retos de Dificultad Media (Workloads, Red y Almacenamiento)
 
 ## Objetivo
-Resolver ejercicios de ~10 minutos que combinan varios objetos de Kubernetes: StatefulSets, Jobs, sidecars nativos, NetworkPolicy, Ingress, Gateway API, PV estáticos y Kustomize. Ninguno repite los retos del módulo 99 (allí ya se hicieron SA+Role, Ingress TLS, PVC dinámico, deny-all con DNS y ClusterRole de nodos).
+Resolver ejercicios de ~10 minutos que combinan varios objetos de Kubernetes: StatefulSets, Jobs, sidecars nativos, NetworkPolicy, Ingress, Gateway API, PV estáticos, Kustomize, Helm, CRDs, PriorityClass, ValidatingAdmissionPolicy, RBAC con tokens, StorageClass por defecto, Downward API y EndpointSlices. Ninguno repite los retos del módulo 99 (allí ya se hicieron SA+Role, Ingress TLS, PVC dinámico, deny-all con DNS y ClusterRole de nodos).
 
 ## Duración estimada
-90 minutos (8 retos × 10 min + revisión)
+170 minutos (16 retos × 10 min + revisión) — o dos sesiones: retos 1–8 y 9–16
 
 > Namespace principal: `cka2-mid`. Créalo una vez al inicio:
 > ```bash
@@ -737,14 +737,535 @@ kubectl run curl-test -n cka2-prod --rm -it --restart=Never --image=curlimages/c
 
 ---
 
+## Reto 9 — Helm: instalar, actualizar de versión, inspeccionar y hacer rollback (10 min)
+
+> 1. Añade el repo `podinfo` (`https://stefanprodan.github.io/podinfo`) e instala el chart `podinfo`
+>    **versión 6.9.0** como release `web` en `cka2-helm` (créalo con Helm) con `replicaCount=2`
+> 2. Actualiza a la versión **6.10.0** conservando tus valores y añadiendo `ui.message=v2`
+> 3. Muestra los valores de usuario de cada revisión y vuelve a la **revisión 1**
+> 4. Guarda en `/tmp/podinfo-values.yaml` los valores por defecto del chart 6.9.0
+
+```bash
+# Solución
+helm repo add podinfo https://stefanprodan.github.io/podinfo
+helm repo update
+helm search repo podinfo/podinfo --versions | head -5
+
+helm install web podinfo/podinfo --version 6.9.0 \
+  -n cka2-helm --create-namespace --set replicaCount=2 --wait
+
+# Actualizar de versión del chart conservando valores
+helm upgrade web podinfo/podinfo --version 6.10.0 -n cka2-helm \
+  --reset-then-reuse-values --set ui.message=v2 --wait
+
+helm history web -n cka2-helm
+helm get values web -n cka2-helm --revision 1      # replicaCount: 2
+helm get values web -n cka2-helm --revision 2      # replicaCount: 2 + ui.message: v2
+
+helm rollback web 1 -n cka2-helm --wait
+helm show values podinfo/podinfo --version 6.9.0 > /tmp/podinfo-values.yaml
+```
+
+> **Trampa real:** `helm upgrade --reuse-values` hacia una versión **nueva** del chart reutiliza los
+> valores *calculados* de la release anterior y descarta los defaults nuevos del chart → aquí falla con
+> `nil pointer evaluating interface {}.enabled`. `--reset-then-reuse-values` (Helm ≥ 3.14) parte de los
+> defaults del chart nuevo y aplica encima tus valores. Alternativa clásica: `-f mis-valores.yaml`.
+
+**Verificación:**
+```bash
+helm list -n cka2-helm
+# web  REVISION 3  deployed  podinfo-6.9.0  6.9.0
+helm history web -n cka2-helm | tail -1          # 3 ... Rollback to 1
+kubectl get deploy -n cka2-helm web-podinfo \
+  -o jsonpath='{.spec.replicas} {.spec.template.spec.containers[0].image}{"\n"}'
+# 2 ghcr.io/stefanprodan/podinfo:6.9.0
+kubectl get secrets -n cka2-helm -l owner=helm     # Helm guarda cada revisión como Secret
+grep -c "" /tmp/podinfo-values.yaml
+```
+
+---
+
+## Reto 10 — CustomResourceDefinition y recursos personalizados (10 min)
+
+> Crea la CRD `backups.cka2.example.com` (namespaced, kind `Backup`, nombre corto `bk`) con versión
+> `v1` y un esquema que exija `spec.origen` (string) y `spec.retencionDias` (entero entre 1 y 30),
+> y una columna extra `RETENCION` en `kubectl get`. Crea `bk-diario` en `cka2-mid` y demuestra que
+> la API rechaza un `Backup` con `retencionDias: 90`.
+
+```bash
+# Solución
+cat <<'EOF' | kubectl apply -f -
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: backups.cka2.example.com        # <plural>.<grupo>
+spec:
+  group: cka2.example.com
+  scope: Namespaced
+  names:
+    kind: Backup
+    plural: backups
+    singular: backup
+    shortNames: ["bk"]
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    additionalPrinterColumns:
+    - name: RETENCION
+      type: integer
+      jsonPath: .spec.retencionDias
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            required: ["origen", "retencionDias"]
+            properties:
+              origen:
+                type: string
+              retencionDias:
+                type: integer
+                minimum: 1
+                maximum: 30
+EOF
+
+kubectl wait --for=condition=Established crd/backups.cka2.example.com
+cat <<'EOF' | kubectl apply -f -
+apiVersion: cka2.example.com/v1
+kind: Backup
+metadata:
+  name: bk-diario
+  namespace: cka2-mid
+spec:
+  origen: pvc/datos-kv-0
+  retencionDias: 7
+EOF
+```
+
+**Verificación:**
+```bash
+kubectl api-resources --api-group=cka2.example.com     # backups  bk  cka2.example.com/v1  true  Backup
+kubectl get bk -n cka2-mid                             # NAME bk-diario  RETENCION 7
+kubectl explain backup.spec                            # el esquema documenta la API
+cat <<'EOF' | kubectl apply -f -
+apiVersion: cka2.example.com/v1
+kind: Backup
+metadata:
+  name: bk-malo
+  namespace: cka2-mid
+spec:
+  origen: pvc/x
+  retencionDias: 90
+EOF
+# The Backup "bk-malo" is invalid: spec.retencionDias: Invalid value: 90: ... should be less than or equal to 30
+```
+
+> Una CRD solo **almacena y valida** objetos; el comportamiento lo aporta un **operador** (controlador
+> que observa esos objetos). En el examen te pueden pedir listar CRDs de un operador instalado
+> (`kubectl get crd | grep <grupo>`) o crear/consultar sus recursos.
+
+---
+
+## Reto 11 — PriorityClass y preempción (10 min)
+
+> 1. Crea las PriorityClasses `cka2-baja` (100) y `cka2-alta` (100000), ninguna por defecto
+> 2. En `cka2-mid`, despliega `batch` (3 réplicas, `busybox:1.36 sleep 3600`, `cka2-baja`, request `500m` de CPU)
+>    fijado a `k3s-worker2`
+> 3. Crea el pod `critico` (`nginx:alpine`, `cka2-alta`, request `800m`) en el mismo nodo
+> 4. Explica qué pasa con `batch` y por qué
+
+```bash
+# Solución
+kubectl create priorityclass cka2-baja --value=100 --description="trabajos batch"
+kubectl create priorityclass cka2-alta --value=100000 --description="servicios críticos"
+kubectl get node k3s-worker2 -o jsonpath='{.status.allocatable.cpu}{"\n"}'      # 2
+
+cat <<'EOF' | kubectl apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: batch
+  namespace: cka2-mid
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: batch
+  template:
+    metadata:
+      labels:
+        app: batch
+    spec:
+      priorityClassName: cka2-baja
+      nodeSelector:
+        kubernetes.io/hostname: k3s-worker2
+      containers:
+      - name: batch
+        image: busybox:1.36
+        command: ["sleep", "3600"]
+        resources:
+          requests:
+            cpu: 500m
+EOF
+kubectl rollout status deploy/batch -n cka2-mid      # 3 × 500m = 1500m ocupados
+
+cat <<'EOF' | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: critico
+  namespace: cka2-mid
+spec:
+  priorityClassName: cka2-alta
+  nodeSelector:
+    kubernetes.io/hostname: k3s-worker2
+  containers:
+  - name: nginx
+    image: nginx:alpine
+    resources:
+      requests:
+        cpu: 800m
+EOF
+```
+
+**Verificación:**
+```bash
+kubectl get events -n cka2-mid --field-selector reason=Preempted
+# Preempted by pod ... on node k3s-worker2
+kubectl get pods -n cka2-mid -o wide -l app=batch       # 2 Running + 1 Pending (sin hueco)
+kubectl get pod critico -n cka2-mid -o jsonpath='{.spec.priority} {.status.phase}{"\n"}'
+# 100000 Running   (el admission controller resuelve priorityClassName → spec.priority)
+kubectl get pc
+```
+
+> El scheduler **desaloja** pods de menor prioridad para hacer hueco (respetando PDBs "en la medida de lo
+> posible"). `preemptionPolicy: Never` da prioridad en la cola sin desalojar a nadie. El cluster ya trae
+> `system-cluster-critical` y `system-node-critical`; usa una sola `globalDefault: true` como mucho.
+
+---
+
+## Reto 12 — ValidatingAdmissionPolicy (CEL) (10 min)
+
+> En los namespaces con la label `politica=estricta`, rechaza Deployments que:
+> - tengan más de **3 réplicas** (también al hacer `kubectl scale`)
+> - usen imágenes **sin tag** o con tag `:latest`
+>
+> Aplícalo a `cka2-mid` y demuestra los tres rechazos.
+
+```bash
+# Solución
+cat <<'EOF' | kubectl apply -f -
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: cka2-deploy-estricto
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups: ["apps"]
+      apiVersions: ["v1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["deployments", "deployments/scale"]   # sin /scale, "kubectl scale" se la salta
+  validations:
+  - expression: "object.spec.replicas <= 3"
+    message: "máximo 3 réplicas"
+  - expression: >-
+      !has(object.spec.template) ||
+      object.spec.template.spec.containers.all(c, c.image.contains(':') && !c.image.endsWith(':latest'))
+    messageExpression: "'imagen sin tag fijo en ' + object.metadata.name"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: cka2-deploy-estricto
+spec:
+  policyName: cka2-deploy-estricto
+  validationActions: ["Deny"]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        politica: estricta
+EOF
+kubectl label namespace cka2-mid politica=estricta
+```
+
+**Verificación:**
+```bash
+kubectl create deployment v1 -n cka2-mid --image=nginx:alpine --replicas=5
+# denied request: máximo 3 réplicas
+kubectl create deployment v2 -n cka2-mid --image=nginx
+# denied request: imagen sin tag fijo en v2
+kubectl create deployment v3 -n cka2-mid --image=nginx:alpine --replicas=2     # created
+kubectl scale deployment v3 -n cka2-mid --replicas=6
+# denied request: máximo 3 réplicas
+kubectl create deployment v4 -n default --image=nginx --replicas=5             # created (namespace sin label)
+kubectl delete deployment v4 -n default
+```
+
+> En `deployments/scale` el objeto es un `Scale` (sin `spec.template`): por eso la guarda `!has(object.spec.template)`.
+> `validationActions` admite `Deny`, `Warn` y `Audit`: empieza con `Warn` en producción.
+
+---
+
+## Reto 13 — ClusterRole reutilizable, ServiceAccount y token de corta duración (10 min)
+
+> 1. Crea la ClusterRole `cka2-lector-apps` (get/list/watch de deployments, replicasets y pods)
+> 2. Concede esa ClusterRole a la ServiceAccount `ci-bot` **solo** en `cka2-mid` y `cka2-helm`
+> 3. Genera un token de **10 minutos** para `ci-bot` y úsalo con `kubectl` sin tocar tu kubeconfig
+
+```bash
+# Solución
+kubectl create clusterrole cka2-lector-apps --verb=get,list,watch \
+  --resource=deployments.apps,replicasets.apps,pods
+kubectl create serviceaccount ci-bot -n cka2-mid
+
+# RoleBinding (namespaced) → la ClusterRole solo aplica en ESE namespace
+kubectl create rolebinding ci-bot-lectura -n cka2-mid  --clusterrole=cka2-lector-apps --serviceaccount=cka2-mid:ci-bot
+kubectl create rolebinding ci-bot-lectura -n cka2-helm --clusterrole=cka2-lector-apps --serviceaccount=cka2-mid:ci-bot
+
+TOKEN=$(kubectl create token ci-bot -n cka2-mid --duration=10m)
+
+# Tu kubeconfig ya trae un certificado de cliente, y el API server lo autentica ANTES que el token:
+# para actuar como ci-bot usa un kubeconfig vacío con solo server + CA + token
+SERVER=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
+kubectl config view --raw --minify \
+  -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d > /tmp/ca.crt
+kbot() { kubectl --kubeconfig=/dev/null --server="$SERVER" --certificate-authority=/tmp/ca.crt --token="$TOKEN" "$@"; }
+```
+
+**Verificación:**
+```bash
+kbot auth whoami                                       # system:serviceaccount:cka2-mid:ci-bot
+kbot get deploy -n cka2-helm                           # permitido
+kbot get deploy -n default                             # Forbidden
+kbot delete pod --all -n cka2-mid                      # Forbidden
+kubectl auth can-i --list -n cka2-mid --as=system:serviceaccount:cka2-mid:ci-bot | grep -E "deployments|pods"
+echo "$TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | grep -o '"exp":[0-9]*'   # caduca en 10 min
+rm /tmp/ca.crt
+```
+
+> **ClusterRole + RoleBinding** = definir los permisos una vez y concederlos namespace a namespace.
+> **ClusterRole + ClusterRoleBinding** = en todo el cluster. Un Role nunca puede usarse en un ClusterRoleBinding.
+
+---
+
+## Reto 14 — Cambiar la StorageClass por defecto (10 min)
+
+> Crea la StorageClass `cka2-retain` (provisioner `rancher.io/local-path`, `Retain`,
+> `WaitForFirstConsumer`) y hazla la **única** StorageClass por defecto. Comprueba que un PVC
+> **sin** `storageClassName` la usa. Al terminar, deja `local-path` otra vez como predeterminada.
+
+```bash
+# Solución
+cat <<'EOF' | kubectl apply -f -
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: cka2-retain
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: rancher.io/local-path
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+EOF
+kubectl patch storageclass local-path \
+  -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}'
+kubectl get sc                    # solo cka2-retain (default)
+
+kubectl create -n cka2-mid -f - <<'EOF'
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-sin-clase
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 32Mi
+EOF
+kubectl run usa-pvc -n cka2-mid --image=busybox:1.36 \
+  --overrides='{"spec":{"volumes":[{"name":"d","persistentVolumeClaim":{"claimName":"pvc-sin-clase"}}],"containers":[{"name":"c","image":"busybox:1.36","command":["sleep","3600"],"volumeMounts":[{"name":"d","mountPath":"/d"}]}]}}'
+```
+
+**Verificación:**
+```bash
+kubectl get pvc pvc-sin-clase -n cka2-mid -o jsonpath='{.spec.storageClassName} {.status.phase}{"\n"}'
+# cka2-retain Bound   (el admission controller DefaultStorageClass la asignó al crear el PVC)
+kubectl get pv -o custom-columns='PV:.metadata.name,CLASE:.spec.storageClassName,RECLAIM:.spec.persistentVolumeReclaimPolicy' | grep cka2-retain
+
+# Restaurar
+kubectl patch storageclass local-path \
+  -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+kubectl patch storageclass cka2-retain \
+  -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}'
+kubectl get sc                    # local-path (default)
+```
+
+> En k3s, al reiniciar el server el addon vuelve a marcar `local-path` como default. Con **dos**
+> StorageClasses por defecto, Kubernetes usa la más reciente: quita siempre la anotación de la otra.
+
+---
+
+## Reto 15 — Downward API y volumen proyectado (10 min)
+
+> Crea el pod `info` en `cka2-mid` (`busybox:1.36`, label `equipo=plataforma`, request `50m`/`32Mi`, limit `64Mi`) que:
+> - exponga como variables `NODO`, `POD_IP` y `CPU_REQ` (en milicores)
+> - monte en `/etc/info` un **único** volumen proyectado con: las labels del pod (`labels`),
+>   el ConfigMap `app-settings` (clave `modo`) y el Secret `db-cred` (clave `password`)
+
+```bash
+# Solución
+kubectl create configmap app-settings -n cka2-mid --from-literal=modo=produccion
+kubectl create secret generic db-cred -n cka2-mid --from-literal=password=Sup3rS3cr3t
+
+cat <<'EOF' | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: info
+  namespace: cka2-mid
+  labels:
+    equipo: plataforma
+spec:
+  containers:
+  - name: info
+    image: busybox:1.36
+    command: ["sleep", "3600"]
+    resources:
+      requests:
+        cpu: 50m
+        memory: 32Mi
+      limits:
+        memory: 64Mi
+    env:
+    - name: NODO
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
+    - name: POD_IP
+      valueFrom:
+        fieldRef:
+          fieldPath: status.podIP
+    - name: CPU_REQ
+      valueFrom:
+        resourceFieldRef:
+          containerName: info
+          resource: requests.cpu
+          divisor: 1m
+    volumeMounts:
+    - name: todo
+      mountPath: /etc/info
+      readOnly: true
+  volumes:
+  - name: todo
+    projected:
+      sources:
+      - downwardAPI:
+          items:
+          - path: labels
+            fieldRef:
+              fieldPath: metadata.labels
+      - configMap:
+          name: app-settings
+          items:
+          - key: modo
+            path: modo
+      - secret:
+          name: db-cred
+          items:
+          - key: password
+            path: password
+EOF
+kubectl wait --for=condition=Ready pod/info -n cka2-mid
+```
+
+**Verificación:**
+```bash
+kubectl exec -n cka2-mid info -- sh -c 'echo $NODO $POD_IP $CPU_REQ'
+# k3s-worker 10.42.x.x 50
+kubectl exec -n cka2-mid info -- ls /etc/info          # labels  modo  password
+kubectl exec -n cka2-mid info -- cat /etc/info/labels  # equipo="plataforma"
+kubectl label pod info -n cka2-mid version=2
+sleep 60; kubectl exec -n cka2-mid info -- cat /etc/info/labels
+# aparece version="2": el volumen se actualiza; las variables de entorno NO
+```
+
+---
+
+## Reto 16 — Service sin selector + EndpointSlice manual hacia un servicio externo (10 min)
+
+> Los pods de `cka2-mid` deben llegar a la "API heredada" (que es el API server, `<IP de k3s-server>:6443`)
+> por el nombre `api-externa` en el puerto **443**, sin `ExternalName` (hay que apuntar a una IP).
+
+```bash
+# Solución
+SERVER_IP=$(kubectl get node k3s-server -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}')
+
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-externa
+  namespace: cka2-mid
+spec:                     # sin selector: Kubernetes no gestiona sus endpoints
+  ports:
+  - name: https
+    port: 443
+    targetPort: 6443
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: api-externa-1
+  namespace: cka2-mid
+  labels:
+    kubernetes.io/service-name: api-externa            # así se asocia al Service
+    endpointslice.kubernetes.io/managed-by: cka2-admin # cualquier valor distinto del controlador
+addressType: IPv4
+ports:
+- name: https             # debe coincidir con el nombre del puerto del Service
+  port: 6443
+endpoints:
+- addresses: ["$SERVER_IP"]
+EOF
+```
+
+**Verificación:**
+```bash
+kubectl describe svc api-externa -n cka2-mid | grep -E "Selector|Endpoints"
+# Selector: <none>   Endpoints: 192.168.252.2:6443
+kubectl run t -n cka2-mid --rm -i --restart=Never --image=curlimages/curl:8.11.1 -- \
+  curl -sk -m 5 -o /dev/null -w "%{http_code}\n" https://api-externa/version
+# 401 → llegamos al API server (sin credenciales); la conexión funciona
+```
+
+> **ExternalName** solo crea un CNAME (no sirve para IPs ni remapea puertos). **Service sin selector +
+> EndpointSlice** sí: es el patrón para BDs externas o migraciones graduales hacia el cluster.
+
+---
+
 ## Limpieza final
 
 ```bash
 kubectl config set-context --current --namespace=default
 kubectl delete -k kustomize/overlays/dev --ignore-not-found
 kubectl delete -k kustomize/overlays/prod --ignore-not-found
-kubectl delete namespace cka2-mid cka2-front cka2-dev cka2-prod
-kubectl delete pv pv-cka2
+helm uninstall web -n cka2-helm 2>/dev/null; helm repo remove podinfo 2>/dev/null
+kubectl delete namespace cka2-mid cka2-front cka2-dev cka2-prod cka2-helm --ignore-not-found
+kubectl delete pv pv-cka2 --ignore-not-found
+kubectl delete crd backups.cka2.example.com --ignore-not-found
+kubectl delete priorityclass cka2-baja cka2-alta --ignore-not-found
+kubectl delete validatingadmissionpolicybinding cka2-deploy-estricto --ignore-not-found
+kubectl delete validatingadmissionpolicy cka2-deploy-estricto --ignore-not-found
+kubectl delete clusterrole cka2-lector-apps --ignore-not-found
+kubectl patch storageclass local-path -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+kubectl delete storageclass cka2-retain --ignore-not-found
+# Los PV Retain de cka2-retain quedan Released: bórralos a mano
+kubectl get pv --no-headers | awk '$5=="Released" {print $1}' | xargs -r kubectl delete pv
+rm -f /tmp/podinfo-values.yaml
 multipass exec k3s-worker -- sudo rm -rf /srv/cka2-datos
 # Los PVC datos-kv-* del Reto 1 se borran con el namespace; local-path borra sus directorios (Delete)
 ```
@@ -759,3 +1280,9 @@ multipass exec k3s-worker -- sudo rm -rf /srv/cka2-datos
 4. En una NetworkPolicy, ¿cómo distingues visualmente un AND de un OR entre `namespaceSelector` y `podSelector`?
 5. ¿Qué ventaja tiene repartir tráfico por pesos en un `HTTPRoute` frente a jugar con el número de réplicas detrás de un mismo Service?
 6. ¿Por qué un PV con `Retain` queda `Released` y no `Available` tras borrar el PVC?
+7. ¿Por qué `helm upgrade --reuse-values` puede romper al cambiar de versión de chart y qué hace distinto `--reset-then-reuse-values`?
+8. Una CRD sin operador, ¿para qué sirve? ¿Qué aporta el esquema OpenAPI?
+9. ¿Qué riesgos tiene la preempción para cargas `batch` y cómo los mitigarías?
+10. ¿Por qué una ValidatingAdmissionPolicy sobre `deployments` no ve un `kubectl scale`?
+11. ¿Cuándo usarías ClusterRole + RoleBinding en vez de un Role por namespace?
+12. ¿Qué diferencia hay entre un Service `ExternalName` y uno sin selector con EndpointSlice manual?

@@ -1,10 +1,10 @@
 # Lab 100 — Básico: Retos Rápidos (Configuración, Rollouts y Scheduling)
 
 ## Objetivo
-Resolver ejercicios cortos con límite de tiempo, estilo examen CKA. Cada reto dura ~5 minutos. Ninguno repite los retos del módulo 99.
+Resolver ejercicios cortos con límite de tiempo, estilo examen CKA. Cada reto dura ~5 minutos. Ninguno repite los retos del módulo 99. Los retos 11–20 cubren DaemonSets, ExternalName, securityContext, init containers, kubeconfig, `kubectl top`, `crictl`, hostPath, pods multicontenedor y selectores.
 
 ## Duración estimada
-60 minutos (10 retos × 5 min + revisión)
+120 minutos (20 retos × 5 min + revisión) — o dos sesiones: retos 1–10 y 11–20
 
 > Todos los retos usan el namespace `cka2` (salvo el Reto 9). Créalo una vez al inicio:
 > ```bash
@@ -498,10 +498,415 @@ kubectl delete pod carga -n cka2
 
 ---
 
+## Reto 11 — DaemonSet que llega también a un nodo con taint (4 min)
+
+> Pon `k3s-worker` en mantenimiento con el taint `mantenimiento=si:NoSchedule`. Después crea en `cka2`
+> el DaemonSet `node-agent` (`busybox:1.36`, `sleep 3600`, request `10m`/`16Mi`) que corra **en los 3 nodos**,
+> incluido el que tiene el taint. Al terminar, quita el taint.
+
+```bash
+# Solución
+kubectl taint node k3s-worker mantenimiento=si:NoSchedule
+
+# No hay "kubectl create daemonset": genera un Deployment y transfórmalo
+kubectl create deployment node-agent --image=busybox:1.36 -n cka2 \
+  --dry-run=client -o yaml -- sleep 3600 > ds.yaml
+# Editar: kind: DaemonSet, borrar replicas/strategy/status, añadir tolerations y resources
+```
+
+```yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-agent
+  namespace: cka2
+spec:
+  selector:
+    matchLabels:
+      app: node-agent
+  template:
+    metadata:
+      labels:
+        app: node-agent
+    spec:
+      tolerations:
+      - key: mantenimiento
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: busybox
+        image: busybox:1.36
+        command: ["sleep", "3600"]
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+```
+
+```bash
+kubectl apply -f ds.yaml && rm ds.yaml
+```
+
+**Verificación:**
+```bash
+kubectl get ds node-agent -n cka2                 # DESIRED 3  READY 3
+kubectl get pods -n cka2 -l app=node-agent -o wide # uno en cada nodo, también k3s-worker
+kubectl taint node k3s-worker mantenimiento=si:NoSchedule-
+```
+
+> Si aún tienes el taint `dedicado=bd:NoSchedule` del Reto 6 en `k3s-worker2`, verás `DESIRED 2`:
+> una toleration con solo `operator: Exists` (sin `key`) tolera **cualquier** taint.
+>
+> Un DaemonSet ya tolera de serie `node.kubernetes.io/unschedulable`, `not-ready`, `unreachable`, etc.,
+> pero **no** taints personalizados. Para que vaya también a nodos de control plane en kubeadm:
+> toleration `node-role.kubernetes.io/control-plane:NoSchedule`.
+
+---
+
+## Reto 12 — Service ExternalName (3 min)
+
+> Crea en `cka2` el Service `buscador` que resuelva al nombre externo `www.kubernetes.io`.
+> Comprueba desde un pod qué devuelve el DNS.
+
+```bash
+# Solución
+kubectl create service externalname buscador --external-name=www.kubernetes.io -n cka2
+```
+
+**Verificación:**
+```bash
+kubectl get svc buscador -n cka2
+# TYPE ExternalName   CLUSTER-IP <none>   EXTERNAL-IP www.kubernetes.io
+kubectl run dns -n cka2 --rm -i --restart=Never --image=busybox:1.36 -- nslookup buscador.cka2.svc.cluster.local
+# buscador.cka2.svc.cluster.local  canonical name = www.kubernetes.io
+```
+
+> Un ExternalName **no tiene ClusterIP, ni puertos, ni proxy**: es solo un registro CNAME. Si el destino
+> es HTTPS con SNI/virtual hosts, el cliente seguirá enviando el nombre `buscador` en la cabecera Host.
+
+---
+
+## Reto 13 — securityContext: no root, solo lectura y sin capabilities (5 min)
+
+> Crea el pod `seguro` en `cka2` (`busybox:1.36`, `sleep 3600`) que:
+> - corra con UID `1000`, GID `3000` y `fsGroup` `2000`
+> - tenga el sistema de archivos raíz **de solo lectura** pero pueda escribir en `/tmp`
+> - no pueda escalar privilegios y elimine **todas** las capabilities
+
+```bash
+# Solución
+cat <<'EOF' | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: seguro
+  namespace: cka2
+spec:
+  securityContext:              # nivel pod: aplica a todos los contenedores
+    runAsUser: 1000
+    runAsGroup: 3000
+    fsGroup: 2000
+  containers:
+  - name: app
+    image: busybox:1.36
+    command: ["sleep", "3600"]
+    securityContext:            # nivel contenedor: aquí van capabilities y readOnlyRootFilesystem
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: ["ALL"]
+    volumeMounts:
+    - name: tmp
+      mountPath: /tmp
+  volumes:
+  - name: tmp
+    emptyDir: {}
+EOF
+```
+
+**Verificación:**
+```bash
+kubectl exec -n cka2 seguro -- id
+# uid=1000 gid=3000 groups=2000,3000
+kubectl exec -n cka2 seguro -- touch /prueba          # Read-only file system
+kubectl exec -n cka2 seguro -- sh -c 'touch /tmp/ok && ls -ln /tmp/ok'   # grupo 2000 (fsGroup)
+kubectl exec -n cka2 seguro -- grep Cap /proc/1/status
+# CapEff: 0000000000000000
+```
+
+---
+
+## Reto 14 — Init container que espera a una dependencia (4 min)
+
+> Crea el pod `app-con-espera` en `cka2` (`nginx:alpine`) con un init container `espera-bd`
+> (`busybox:1.36`) que no termine hasta que el Service `bd` del namespace resuelva por DNS.
+> Comprueba el estado del pod, crea después el Service `bd` (ClusterIP, puerto 5432) y verifica que arranca.
+
+```bash
+# Solución
+cat <<'EOF' | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app-con-espera
+  namespace: cka2
+spec:
+  initContainers:
+  - name: espera-bd
+    image: busybox:1.36
+    command: ["sh", "-c", "until nslookup bd.cka2.svc.cluster.local; do echo esperando bd; sleep 2; done"]
+  containers:
+  - name: nginx
+    image: nginx:alpine
+EOF
+
+kubectl get pod app-con-espera -n cka2          # Init:0/1
+kubectl logs app-con-espera -n cka2 -c espera-bd --tail=2   # esperando bd
+
+kubectl create service clusterip bd --tcp=5432:5432 -n cka2
+```
+
+**Verificación:**
+```bash
+kubectl wait --for=condition=Ready pod/app-con-espera -n cka2 --timeout=60s
+kubectl get pod app-con-espera -n cka2          # Running 1/1
+kubectl get pod app-con-espera -n cka2 \
+  -o jsonpath='{.status.initContainerStatuses[0].state.terminated.reason}{"\n"}'   # Completed
+```
+
+> Init container clásico = se ejecuta **antes** y debe **terminar**. Sidecar nativo (Reto 3 del intermedio)
+> = init container con `restartPolicy: Always` que **sigue corriendo**.
+
+---
+
+## Reto 15 — kubeconfig: contextos sin romper el actual (4 min)
+
+> 1. Escribe en `/tmp/contextos.txt` los nombres de todos los contextos (uno por línea)
+> 2. Escribe en `/tmp/server.txt` la URL del API server del contexto actual
+> 3. Crea el contexto `cka2-ctx` (mismo cluster y usuario que el actual, namespace `cka2`) **sin cambiar** el contexto actual
+> 4. Lista los pods de `cka2` usando ese contexto
+
+```bash
+# Solución
+kubectl config get-contexts -o name > /tmp/contextos.txt
+kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' > /tmp/server.txt
+
+CLUSTER=$(kubectl config view --minify -o jsonpath='{.contexts[0].context.cluster}')
+USUARIO=$(kubectl config view --minify -o jsonpath='{.contexts[0].context.user}')
+kubectl config set-context cka2-ctx --cluster=$CLUSTER --user=$USUARIO --namespace=cka2
+
+kubectl --context=cka2-ctx get pods
+```
+
+**Verificación:**
+```bash
+cat /tmp/contextos.txt /tmp/server.txt; echo
+kubectl config current-context                     # el mismo de antes (p. ej. default)
+kubectl config get-contexts cka2-ctx               # NAMESPACE cka2
+kubectl config delete-context cka2-ctx             # limpieza
+```
+
+> En el examen cada pregunta empieza con `kubectl config use-context <x>`. `--context` sirve para
+> consultar otro cluster puntualmente sin cambiar de contexto.
+
+---
+
+## Reto 16 — Consumo de recursos con `kubectl top` (3 min)
+
+> 1. Escribe en `/tmp/top-pod.txt` el **nombre** del pod de `kube-system` que más **memoria** consume
+> 2. Escribe en `/tmp/top-nodos.txt` los nodos ordenados por **CPU** (mayor primero), con cabecera
+
+```bash
+# Solución
+kubectl top pods -n kube-system --sort-by=memory --no-headers | head -1 | awk '{print $1}' > /tmp/top-pod.txt
+kubectl top nodes --sort-by=cpu > /tmp/top-nodos.txt
+```
+
+**Verificación:**
+```bash
+cat /tmp/top-pod.txt                  # p. ej. traefik-... o coredns-...
+cat /tmp/top-nodos.txt
+kubectl top pods -n kube-system --containers | head -5   # desglose por contenedor
+```
+
+> `kubectl top` necesita metrics-server y muestra **uso real**, no requests. Para los requests de un
+> nodo: `kubectl describe node <nodo> | grep -A8 "Allocated resources"`.
+
+---
+
+## Reto 17 — `crictl` en el nodo: contenedores sin pasar por la API (4 min)
+
+> Crea el pod `ruidoso` en `cka2` (`busybox:1.36`, que imprima la fecha cada 2 s). Desde **el nodo**
+> donde corre, y usando solo `crictl`, escribe en `/tmp/ruidoso.txt` (dentro del nodo) el **ID del
+> contenedor** y sus **3 últimas líneas de log**.
+
+```bash
+# Solución
+kubectl run ruidoso -n cka2 --image=busybox:1.36 -- sh -c 'while true; do date; sleep 2; done'
+kubectl wait --for=condition=Ready pod/ruidoso -n cka2
+NODO=$(kubectl get pod ruidoso -n cka2 -o jsonpath='{.spec.nodeName}'); echo $NODO
+
+multipass exec $NODO -- sudo bash -c '
+  crictl pods --name ruidoso
+  ID=$(crictl ps --name ruidoso -q)
+  { echo "$ID"; crictl logs --tail 3 "$ID"; } > /tmp/ruidoso.txt
+  cat /tmp/ruidoso.txt'
+```
+
+**Verificación:**
+```bash
+ID=$(multipass exec $NODO -- sudo crictl ps --name ruidoso -q)
+multipass exec $NODO -- sudo crictl inspect -o go-template --template '{{.info.pid}}' $ID; echo
+# PID del proceso en el host (ps -fp <pid> en el nodo)
+multipass exec $NODO -- sudo crictl ps -a | head -5
+```
+
+> En k3s `crictl` ya está configurado (habla con el containerd embebido). En kubeadm: `crictl` usa
+> `/etc/crictl.yaml` (`runtime-endpoint: unix:///run/containerd/containerd.sock`). Es la herramienta
+> clave cuando el API server está caído: `crictl ps -a | grep kube-apiserver` + `crictl logs <id>`.
+
+---
+
+## Reto 18 — Volumen hostPath de solo lectura en un nodo concreto (3 min)
+
+> Crea el pod `lector-logs` en `cka2` (`busybox:1.36`, `sleep 3600`) en `k3s-worker2` que monte
+> el directorio `/var/log` del nodo en `/host-logs` **en solo lectura**.
+
+```bash
+# Solución
+cat <<'EOF' | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: lector-logs
+  namespace: cka2
+spec:
+  nodeName: k3s-worker2
+  containers:
+  - name: lector
+    image: busybox:1.36
+    command: ["sleep", "3600"]
+    volumeMounts:
+    - name: logs
+      mountPath: /host-logs
+      readOnly: true
+  volumes:
+  - name: logs
+    hostPath:
+      path: /var/log
+      type: Directory
+EOF
+kubectl wait --for=condition=Ready pod/lector-logs -n cka2
+```
+
+**Verificación:**
+```bash
+kubectl exec -n cka2 lector-logs -- ls /host-logs | head -5     # syslog, pods, containers...
+kubectl exec -n cka2 lector-logs -- tail -2 /host-logs/syslog
+kubectl exec -n cka2 lector-logs -- touch /host-logs/x          # Read-only file system
+```
+
+> `hostPath` ata el pod a un nodo y da acceso a su sistema de archivos: por eso Pod Security
+> `baseline`/`restricted` lo prohíbe. `type: Directory` hace fallar el pod si la ruta no existe.
+
+---
+
+## Reto 19 — Pod multicontenedor: logs por contenedor y `kubectl cp` (4 min)
+
+> Crea el pod `dos-contenedores` en `cka2` con:
+> - `escritor` (`busybox:1.36`): escribe la fecha cada 3 s en `/datos/log.txt` y también por stdout
+> - `lector` (`busybox:1.36`): hace `tail -f /datos/log.txt`
+> - ambos comparten un `emptyDir`
+>
+> Muestra los logs de **solo** `lector`, los de todos los contenedores con prefijo, y copia
+> `/datos/log.txt` a tu máquina como `./log-copia.txt`.
+
+```bash
+# Solución
+cat <<'EOF' | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dos-contenedores
+  namespace: cka2
+spec:
+  containers:
+  - name: escritor
+    image: busybox:1.36
+    command: ["sh", "-c", "while true; do date | tee -a /datos/log.txt; sleep 3; done"]
+    volumeMounts:
+    - name: datos
+      mountPath: /datos
+  - name: lector
+    image: busybox:1.36
+    command: ["sh", "-c", "touch /datos/log.txt; tail -f /datos/log.txt"]
+    volumeMounts:
+    - name: datos
+      mountPath: /datos
+  volumes:
+  - name: datos
+    emptyDir: {}
+EOF
+kubectl wait --for=condition=Ready pod/dos-contenedores -n cka2
+sleep 6
+kubectl logs dos-contenedores -n cka2 -c lector --tail=2
+kubectl logs dos-contenedores -n cka2 --all-containers --prefix --tail=2
+kubectl cp cka2/dos-contenedores:/datos/log.txt ./log-copia.txt -c escritor
+```
+
+**Verificación:**
+```bash
+wc -l log-copia.txt && rm log-copia.txt
+kubectl get pod dos-contenedores -n cka2 -o jsonpath='{.spec.containers[*].name}{"\n"}'   # escritor lector
+```
+
+> Sin `-c`, `kubectl logs` y `kubectl exec` usan el contenedor marcado con la anotación
+> `kubectl.kubernetes.io/default-container` o, si no existe, el primero (y avisan). `kubectl cp`
+> necesita `tar` dentro del contenedor.
+
+---
+
+## Reto 20 — Labels, selectores y anotaciones en bloque (3 min)
+
+> En `cka2` crea los pods `p-dev` (`env=dev,tier=web`), `p-qa` (`env=qa,tier=web`) y `p-prod`
+> (`env=prod,tier=db`), todos `nginx:alpine`. Después:
+> 1. Lista los pods con `env` en `dev` o `qa` **y** que no sean `tier=db`, mostrando la columna `ENV`
+> 2. Añade a todos los `tier=web` la anotación `owner=equipo-web`
+> 3. Cambia la label de `p-qa` a `env=staging`
+> 4. Borra de un solo comando todos los pods con label `env`
+
+```bash
+# Solución
+kubectl run p-dev  -n cka2 --image=nginx:alpine -l env=dev,tier=web
+kubectl run p-qa   -n cka2 --image=nginx:alpine -l env=qa,tier=web
+kubectl run p-prod -n cka2 --image=nginx:alpine -l env=prod,tier=db
+
+kubectl get pods -n cka2 -l 'env in (dev,qa),tier!=db' -L env
+kubectl annotate pods -n cka2 -l tier=web owner=equipo-web
+kubectl label pod p-qa -n cka2 env=staging --overwrite
+```
+
+**Verificación:**
+```bash
+kubectl get pods -n cka2 -l env -L env,tier
+# p-dev dev web / p-prod prod db / p-qa staging web
+kubectl get pods -n cka2 -l tier=web -o jsonpath='{range .items[*]}{.metadata.name}={.metadata.annotations.owner}{"\n"}{end}'
+kubectl delete pods -n cka2 -l env
+```
+
+> Sin `--overwrite`, cambiar una label existente falla (`already has a value`). Para quitarla: `kubectl label pod p-qa env-`.
+
+---
+
 ## Limpieza final
 
 ```bash
 kubectl delete namespace cka2 cka2-quota
+kubectl taint node k3s-worker mantenimiento=si:NoSchedule- 2>/dev/null
+kubectl config delete-context cka2-ctx 2>/dev/null
+rm -f /tmp/contextos.txt /tmp/server.txt /tmp/top-pod.txt /tmp/top-nodos.txt
+multipass exec k3s-worker  -- sudo rm -f /tmp/ruidoso.txt
+multipass exec k3s-worker2 -- sudo rm -f /tmp/ruidoso.txt
 # Por si el Reto 6 quedó a medias:
 kubectl taint node k3s-worker2 dedicado=bd:NoSchedule- 2>/dev/null
 kubectl label node k3s-worker2 disco- 2>/dev/null
@@ -516,3 +921,7 @@ multipass exec k3s-worker2 -- sudo rm -f /var/lib/rancher/k3s/agent/pod-manifest
 2. ¿Qué diferencia hay entre `kubectl rollout undo` y `kubectl rollout undo --to-revision=N`?
 3. ¿Por qué un fallo de readiness no reinicia el contenedor y uno de liveness sí?
 4. ¿Qué pasaría con un deployment si creas una ResourceQuota de CPU sin LimitRange en el namespace?
+5. ¿Por qué un DaemonSet no necesita tolerar `node.kubernetes.io/unschedulable` y sí un taint propio?
+6. ¿Qué diferencia hay entre `securityContext` a nivel de pod y de contenedor? ¿Qué campos solo existen en uno de ellos?
+7. ¿Cuándo es imprescindible `crictl` en lugar de `kubectl`?
+8. ¿Por qué `hostPath` se considera peligroso aunque sea de solo lectura?

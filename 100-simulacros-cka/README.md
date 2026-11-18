@@ -2,7 +2,7 @@
 
 ## Rol del administrador
 
-Segunda ronda de simulacros. El módulo 99 ya cubrió los retos "clásicos" (pod multi-contenedor, NodePort, Job simple, PVC dinámico, deny-all, drain sin PDB, backup de SQLite…). Aquí **ningún reto repite ejercicio**: se ejercitan temas de los módulos 01–13 que el 99 no tocó (rollbacks a revisión concreta, StatefulSets, sidecars nativos, PDB bloqueando un drain, CSR de usuarios, snapshots de etcd, Gateway API, Kustomize, DNS roto…). Cada reto tiene:
+Segunda ronda de simulacros. El módulo 99 ya cubrió los retos "clásicos" (pod multi-contenedor, NodePort, Job simple, PVC dinámico, deny-all, drain sin PDB, backup de SQLite…). Aquí **ningún reto repite ejercicio**: se ejercitan temas de los módulos 01–13 que el 99 no tocó (rollbacks a revisión concreta, StatefulSets, sidecars nativos, DaemonSets, securityContext, `crictl`, Helm, CRDs, PriorityClass, ValidatingAdmissionPolicy, EndpointSlices, PDB bloqueando un drain, CSR de usuarios, snapshots de etcd, nodos `NotReady`, scheduler caído, Gateway API, Kustomize, DNS roto…). En total, **46 retos**. Cada reto tiene:
 - Un enunciado breve (como en el examen)
 - Un tiempo límite
 - La solución paso a paso
@@ -87,6 +87,6 @@ kubectl events -n cka2 --for pod/mi-pod --types=Warning
 
 ## Laboratorios
 
-- [Lab Básico](basico/README.md) — Retos rápidos (5 min cada uno) — Configuración, rollouts, probes, scheduling y cuotas
-- [Lab Intermedio](intermedio/README.md) — Retos de dificultad media (10 min) — StatefulSets, Jobs, sidecars, NetworkPolicy, Ingress, Gateway API, PV estáticos y Kustomize
-- [Lab Avanzado](avanzado/README.md) — Retos completos estilo examen (15 min) — Troubleshooting, DNS, mantenimiento con PDB, usuarios con CSR y etcd snapshots
+- [Lab Básico](basico/README.md) — 20 retos rápidos (5 min cada uno) — Configuración, rollouts, probes, scheduling, cuotas, DaemonSets, securityContext, init containers, kubeconfig, `kubectl top`, `crictl`, hostPath y selectores
+- [Lab Intermedio](intermedio/README.md) — 16 retos de dificultad media (10 min) — StatefulSets, Jobs, sidecars, NetworkPolicy, Ingress, Gateway API, PV estáticos, Kustomize, Helm, CRDs, PriorityClass, ValidatingAdmissionPolicy, RBAC con tokens, StorageClass por defecto, Downward API y EndpointSlices
+- [Lab Avanzado](avanzado/README.md) — 10 retos completos estilo examen (15 min) — Troubleshooting de apps, DNS en 3 capas, drain con PDB, usuarios con CSR, backup/restore de etcd, nodo `NotReady`, scheduler caído, pods que se reinician, `externalTrafficPolicy` y mini examen integral
